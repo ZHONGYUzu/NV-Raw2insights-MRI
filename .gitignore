@@ -1,13 +1,44 @@
-__pycache__
-.vs
-.idea
+# IDE / editor
+.vs/
+.idea/
+
+# macOS
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+.pycache_check/
+**/.ipynb_checkpoints/
+
+# Local environments
+.env
+.venv/
+
+# Data folders
 data/
-tfevents/
+dataset/
+cache/
+
+# MRI raw / converted data
+*.h5
+*.hdf5
+*.mat
+*.npy
+*.npz
+
+# Training / inference outputs
+outputs/
+output*/
 exp/
-pretrained_ckpt/
+tfevents/
+runs/
 wandb/
 onelogger*
-**/.ipynb_checkpoints/
-cache/
-dataset/
-outputs/
+
+# Checkpoints / pretrained weights
+pretrained_ckpt/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
