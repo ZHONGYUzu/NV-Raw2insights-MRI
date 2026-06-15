@@ -19,7 +19,6 @@ from monai.data.fft_utils import fftn_centered, ifftn_centered
 from monai.metrics import SSIMMetric
 from monai.utils import LossReduction
 from readers import CestMRIReader, CMRxReconReader, FastMRIReader
-from run4ranking import run4Ranking
 from torch.nn.modules.loss import _Loss
 from torchvision.transforms.functional import center_crop
 
@@ -344,10 +343,8 @@ def postprocess_mri_recon(recon, args, file_type=None, is_training=False, pp_z_s
         # Evaluation mode postprocessing
         recon = recon.transpose()
         if dataset == "cmrxrecon":
-            # if 'Center' in file_type: # CMRxRecon 2025
-            #     recon = run4Ranking2025(recon, file_type)
-            # else:                     # CMRxRecon 2024
-            recon = run4Ranking(recon, file_type)
+            # Preserve the complete reconstruction for saving and evaluation.
+            recon = np.abs(recon).astype(np.float32)
 
     return recon
 
