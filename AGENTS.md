@@ -549,3 +549,73 @@ python scripts/inference.py ...
 - Active config: `configs/nv_raw2insights_mri_base.json` for the confirmed five-case run.
 - Important checkpoint: automatically resolved base-model checkpoint unless explicitly overridden.
 - Expected output: one `.mat` reconstruction per case under `val_img4ranking/`.
+
+### 2026-06-15 Debug Inference Notes
+
+- A one-case debug inference for `Sub0001.json` completed successfully after adding the missing NumPy import used by `postprocess_mri_recon`:
+
+```python
+import numpy as np
+```
+
+- The completed debug output was:
+
+```text
+output/CustomCINEOutputDebugR1/val_img4ranking/Sub0001.mat
+```
+
+- Confirmed output inspection on the server:
+
+```text
+shape: (176, 132, 12, 25)
+dtype: float32
+finite: True
+min/max/mean: 0.0008832483 / 1.0092976 / 0.09585182
+nonzero: 6969600 / 6969600
+```
+
+- This matches the expected full reconstruction layout `(frequency, phase, slice, time)`.
+- Runtime for `Sub0001` was about 29 minutes on one GPU:
+
+```text
+samples=300
+forwards=300
+model_per_forward=5.647s
+model=1694.05s
+total=1707.62s
+```
+
+- The runtime is expected because each CINE case has `25` frames and `12` slices, so inference runs `25 * 12 = 300` forwards with `batch_size=1` through the `758.91M` parameter base model.
+- A timing-only bug produced a negative `data_load` value because `time.time()` and `time.perf_counter()` were mixed in `scripts/inference.py`. This does not affect reconstruction outputs; it only affects profiling text.
+- Estimated inference time on the same setup:
+
+```text
+1 case:   about 29 minutes
+5 cases:  about 2.4 hours
+15 cases: about 7.25 hours
+130 cases: about 63 hours
+```
+
+### Fine-Tuning Split Recommendation For 130 Cases
+
+- Split by case/subject only. Do not split by slice or cardiac frame.
+- Recommended first split:
+
+```text
+Train: 100 cases
+Val:    15 cases
+Test:   15 cases
+Total: 130 cases
+```
+
+- Alternative training-heavy split:
+
+```text
+Train: 105 cases
+Val:    10 cases
+Test:   15 cases
+Total: 130 cases
+```
+
+- Use the training set for fine-tuning, the validation set for checkpoint selection and hyperparameter decisions, and the test set only for final untouched evaluation.
+- For routine development, run inference on 1 case first, then 5 cases, then the validation set. Avoid repeatedly running all 130 cases unless the pipeline and checkpoint choice are already settled.
