@@ -187,7 +187,7 @@ def infer(args):
     model.eval()
     with torch.no_grad():
         tic_val = time.time()
-        previous_case_end = tic_val
+        previous_case_end = time.perf_counter()
         for test_data in tqdm.tqdm(test_loader):
             case_start = time.perf_counter()
             timings = {"data_load": case_start - previous_case_end}
