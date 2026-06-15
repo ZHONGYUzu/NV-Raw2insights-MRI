@@ -356,18 +356,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i",
         "--input_path",
-        default=None,
+        default=Path("dataset/CustomCINEDataR1/json_input"),
         type=Path,
-        required=True,
-        help="Path to the input folder",
+        required=False,
+        help="Path to the input folder (default: dataset/CustomCINEDataR1/json_input)",
     )
     parser.add_argument(
         "-o",
         "--output_path",
-        default=None,
+        default=Path("output/CustomCINEOutputR1"),
         type=Path,
-        required=True,
-        help="Path to the output folder",
+        required=False,
+        help="Path to the output folder (default: output/CustomCINEOutputR1)",
     )
     parser.add_argument(
         "-d",

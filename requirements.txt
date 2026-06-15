@@ -9,6 +9,7 @@ einops==0.8.0
 tensorboard
 timm==1.0.15
 h5py
+scipy
 scikit-image==0.23.2
 wandb
 matplotlib

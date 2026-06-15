@@ -47,6 +47,67 @@ The reader loads these `.mat` files according to the schema in `scripts/readers.
 
 The repository includes an `example` folder with a sample JSON so you can run a quick test. See `scripts/readers.py` and `scripts/mri_data/data_utils.py` for the exact schema and how `.mat` files are loaded.
 
+## Custom CINE H5 and VISTA masks
+
+The custom CINE source H5 files use `(slice, coil, time, PE, FE)`, while the
+inference reader expects logical `(time, slice, coil, PE, FE)`. Use the bundled
+converter instead of transposing and saving manually; it accounts for the
+additional axis reversal performed by `CMRxReconReader` for scipy MAT files.
+
+The converters only write beneath `--output-root`. They do not modify the raw
+H5 files or source VISTA masks.
+
+```bash
+python scripts/convert_cine_h5_kspace_to_mat.py \
+  --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
+  --output-root dataset/CustomCINEDataR1 \
+  --glob 'Sub000[1-5].h5'
+
+for sub in Sub0001 Sub0002 Sub0003 Sub0004 Sub0005; do
+  python scripts/convert_vista_txt_mask_to_mat.py \
+    --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
+    --output-root dataset/CustomCINEDataR1 \
+    --frequency-size 176 \
+    --glob 'mask_VISTA_132x25_acc8_8.txt' \
+    --case-id "$sub"
+done
+```
+
+The first command creates k-space MAT files and initial JSON descriptors. The
+second creates fixed masks with 20 central ACS lines by default and adds each
+mask to its case JSON. Mask filenames use the model-known `ktRadial8` alias so
+the reader extracts acceleration factor 8 correctly.
+
+Before a full run, inspect one descriptor and use debug mode, which limits the
+input list to one case:
+
+```bash
+cat dataset/CustomCINEDataR1/json_input/Sub0001.json
+
+python scripts/validate_cine_inference_data.py \
+  dataset/CustomCINEDataR1/json_input
+
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR1/json_input \
+  -o output/CustomCINEOutputDebugR1 \
+  --debug --profile-timing
+```
+
+Then run all cases without `--debug`:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR1/json_input \
+  -o output/CustomCINEOutputR1
+```
+
+For this repository layout, `scripts/inference.py` defaults to input
+`dataset/CustomCINEDataR1/json_input` and output
+`output/CustomCINEOutputR1`. Explicit `-i` and `-o` arguments still override
+these defaults.
+
 ## Running Inference
 
 ### Single-GPU

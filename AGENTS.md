@@ -50,7 +50,17 @@ Confirmed server file:
 - Dimension order: `(slice, time, phase, frequency, channel)`.
 - This corresponds to evaluator layout `ztpfc`, not `ztfpc`.
 - The final channel dimension is `1` because the image is coil-combined.
-- The file is a normalized fully sampled image derived from full `kSpace` and `dMap`, and can be used as ground truth after applying the same orientation, central-slice selection, time-frame selection, and ranking crop as the saved inference output.
+- The file is a normalized fully sampled image derived from full `kSpace` and `dMap` and can be used as ground truth after matching the saved inference orientation. The current inference path saves all slices and all time frames; it no longer applies central-slice selection, time-frame selection, or the `run4Ranking` spatial crop.
+- To match a current inference output shaped `(frequency, phase, slice, time)`, squeeze the final singleton channel and transpose the ground truth from `(slice, time, phase, frequency)` with `gt = gt[..., 0].transpose(3, 2, 0, 1)`.
+
+### Current Inference Crop Behavior
+
+- Commit `c842626` removed the evaluation-time call to `run4Ranking` from `postprocess_mri_recon`.
+- Current CMRxRecon inference postprocessing applies `recon.transpose()`, magnitude with `np.abs`, and conversion to `float32`; it preserves the complete spatial image, every slice, and every cardiac frame.
+- `crop_k_space(output, (final_shape[-2], final_shape[-1]))` is still used immediately after each model forward. This only restores the model output to the original PE/FE spatial size through a centered k-space crop when needed. It is not the historical ranking crop and does not select slices or time frames.
+- The output directory name `val_img4ranking` and MAT key `img4ranking` are retained for compatibility, but the stored array is now the full reconstruction.
+- For the documented CINE shape, the expected saved reconstruction shape is `(176, 132, 12, 25)`, corresponding to `(frequency, phase, slice, time)`.
+- Evaluation against `norm_img_Sub0001.npy` should compare the full arrays after orientation matching. Do not apply `run4Ranking`, central two-slice selection, first-three-frame selection, or the one-third by one-half spatial crop unless intentionally reproducing the old ranking protocol.
 
 ### Custom CINE Inference Conversion Notes
 
@@ -91,7 +101,8 @@ mask = np.repeat(mask[:, :, None], k.shape[-1], axis=2)            # (25, 132, 1
   - Full inference: use the same fixed mask for all compatible H5 cases, e.g. all cases with `nPha = 25` and phase dimension `132`.
   - Robustness experiment: repeat inference in separate output folders with different mask seeds.
   - Do not mix random mask seeds/accelerations in the first full run unless the experiment intentionally tests robustness to sampling patterns.
-- For a controlled acc8 experiment, a suitable fixed mask is `mask_VISTA_132x25_acc8_8.txt`; convert it once and let every compatible case JSON point to the same converted `.mat` mask.
+- For a controlled acc8 experiment, use `mask_VISTA_132x25_acc8_8.txt` as the fixed source mask for every compatible case.
+- The current bundled converter reuses that same source TXT but writes one case-named MAT copy per subject (`Sub0001_mask_ktRadial8.mat`, etc.). Each JSON points to its corresponding case-named mask. The mask arrays are identical when the same TXT source and options are used.
 - Use CMRxRecon-like paths so the reader can infer acquisition from `MultiCoil/Cine`.
 - Recommended derived layout:
 
@@ -119,95 +130,268 @@ mask = np.repeat(mask[:, :, None], k.shape[-1], axis=2)            # (25, 132, 1
 }
 ```
 
-#### Five-Case Test Conversion Commands
+#### Authoritative End-to-End Custom Data Process
 
-For a small test run using only `Sub0001.h5` through `Sub0005.h5`, write the derived dataset to:
+Run every command below from the NV-Raw2Insights-MRI repository root on the server. The server repository path is not yet documented, so first `cd` to the directory that contains `scripts/`, `configs/`, and this `AGENTS.md`.
+
+Code used by this process:
 
 ```text
-/home/students/studxuzho1/dataset_v1
+scripts/convert_cine_h5_kspace_to_mat.py
+scripts/convert_vista_txt_mask_to_mat.py
+scripts/validate_cine_inference_data.py
+scripts/inference.py
+scripts/visualize_mat.py
+configs/nv_raw2insights_mri_base.json
 ```
 
-K-space conversion command:
+Source paths, which must remain read-only:
+
+```text
+H5 directory:       /mnt/qdata/rawdata/CINE/2D_h5_compressed
+Example H5:         /mnt/qdata/rawdata/CINE/2D_h5_compressed/Sub0001.h5
+VISTA mask folder:  /home/students/studxusiy1/mr_recon/masks
+Selected mask TXT:  /home/students/studxusiy1/mr_recon/masks/mask_VISTA_132x25_acc8_8.txt
+Ground truth root:  /home/students/studxuzho1/dataset_v0/norm_img
+Example ground truth: /home/students/studxuzho1/dataset_v0/norm_img/norm_img_Sub0001.npy
+```
+
+The converted custom dataset is already established at:
+
+```text
+dataset/CustomCINEDataR1
+```
+
+Do not rename or move this existing input dataset. Its task-specific data folders are already named `UnderSample_TaskR1` and `Mask_TaskR1`, while inference reads the case descriptors from its existing `json_input/` folder.
+
+Established input tree:
+
+```text
+dataset/CustomCINEDataR1/
+  MultiCoil/
+    Cine/
+      UnderSample_TaskR1/
+        Sub0001_kspace_full.mat
+        ...
+      Mask_TaskR1/
+        Sub0001_mask_ktRadial8.mat
+        ...
+  json_input/
+    Sub0001.json
+    ...
+    Sub0005.json
+```
+
+Create a new first-level `output/` folder beside `dataset/`, not inside it. The result subfolder uses the `R1` suffix to match the input dataset:
+
+```text
+output/CustomCINEOutputR1
+```
+
+These are the default custom-CINE paths in `scripts/inference.py`, so the production run can omit `-i` and `-o`. Keeping them explicit in documented commands makes the selected experiment paths clear.
+
+1. Confirm the repository files and source inputs:
+
+```bash
+pwd
+ls -l scripts/convert_cine_h5_kspace_to_mat.py \
+      scripts/convert_vista_txt_mask_to_mat.py \
+      scripts/validate_cine_inference_data.py \
+      scripts/inference.py \
+      configs/nv_raw2insights_mri_base.json
+
+ls -l /mnt/qdata/rawdata/CINE/2D_h5_compressed/Sub000{1,2,3,4,5}.h5
+ls -l /home/students/studxusiy1/mr_recon/masks/mask_VISTA_132x25_acc8_8.txt
+```
+
+2. Convert the five full, unmasked H5 k-space arrays:
 
 ```bash
 python scripts/convert_cine_h5_kspace_to_mat.py \
   --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
-  --output-root /home/students/studxuzho1/dataset_v1 \
+  --output-root dataset/CustomCINEDataR1 \
   --glob 'Sub000[1-5].h5'
 ```
 
-This writes derived k-space files to:
+For each subject, this command reads H5 key `kSpace`, converts logical shape `(slice, coil, time, PE, FE)` to `(time, slice, coil, PE, FE)`, and writes MAT key `kspace_full`. The MAT array is stored with reversed axes because `CMRxReconReader` reverses scipy-loaded complex MAT axes when reading it back. Do not replace the converter with a plain `savemat(k)` call without accounting for that reader behavior.
+
+This step creates:
 
 ```text
-/home/students/studxuzho1/dataset_v1/MultiCoil/Cine/UnderSample_TaskR1
+dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/Sub0001_kspace_full.mat
+dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/Sub0002_kspace_full.mat
+dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/Sub0003_kspace_full.mat
+dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/Sub0004_kspace_full.mat
+dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/Sub0005_kspace_full.mat
+dataset/CustomCINEDataR1/json_input/Sub0001.json
+...
+dataset/CustomCINEDataR1/json_input/Sub0005.json
 ```
 
-Mask conversion command for acceleration 8, seed 8:
+At this point each JSON has the k-space path and an empty mask list. Do not run inference yet.
+
+3. Convert and attach the fixed acceleration-8 mask to every case:
 
 ```bash
 for sub in Sub0001 Sub0002 Sub0003 Sub0004 Sub0005; do
   python scripts/convert_vista_txt_mask_to_mat.py \
     --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
-    --output-root /home/students/studxuzho1/dataset_v1 \
+    --output-root dataset/CustomCINEDataR1 \
     --frequency-size 176 \
     --glob 'mask_VISTA_132x25_acc8_8.txt' \
+    --acs-lines 20 \
     --case-id "$sub"
 done
 ```
 
-This writes derived mask files to:
+The converter reads source shape `(phase=132, time=25)`, transposes it to `(time=25, phase=132)`, forces 20 central phase lines to one for every frame, expands frequency to shape `(25, 132, 176)`, and saves MAT key `mask`. The source k-space remains fully sampled; `KspaceMaskd` applies this mask inside inference.
+
+This step creates:
 
 ```text
-/home/students/studxuzho1/dataset_v1/MultiCoil/Cine/Mask_TaskR1
+dataset/CustomCINEDataR1/MultiCoil/Cine/Mask_TaskR1/Sub0001_mask_ktRadial8.mat
+...
+dataset/CustomCINEDataR1/MultiCoil/Cine/Mask_TaskR1/Sub0005_mask_ktRadial8.mat
 ```
 
-Important mask-selection note: using only `--acc 8 --seed 8` selected 9 masks because the mask folder contains multiple sizes with the same acceleration and seed. Use the exact `--glob 'mask_VISTA_132x25_acc8_8.txt'` when converting this CINE data shape.
+It also updates each JSON under `json_input/`. For example, `dataset/CustomCINEDataR1/json_input/Sub0001.json` must contain absolute server paths equivalent to:
 
-#### Successful Five-Case Inference Run
+```json
+{
+  "kspace": "dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/Sub0001_kspace_full.mat",
+  "mask": [
+    "dataset/CustomCINEDataR1/MultiCoil/Cine/Mask_TaskR1/Sub0001_mask_ktRadial8.mat"
+  ]
+}
+```
 
-Confirmed server command:
+4. Double-check the complete derived input before inference:
+
+```bash
+find dataset/CustomCINEDataR1/MultiCoil/Cine \
+  -maxdepth 2 -type f | sort
+
+find dataset/CustomCINEDataR1/json_input \
+  -maxdepth 1 -name 'Sub000*.json' -type f | sort
+
+cat dataset/CustomCINEDataR1/json_input/Sub0001.json
+
+python scripts/validate_cine_inference_data.py \
+  dataset/CustomCINEDataR1/json_input
+```
+
+Expected validator summary for every case:
+
+```text
+OK: Sub0001.json: k-space (25, 12, 15, 132, 176), masks 1
+...
+Validated 5 case(s).
+```
+
+The validator checks that paths exist, the acquisition path contains `MultiCoil/Cine`, k-space is logical 5D complex data, mask shape matches time/PE/FE, mask values are binary, the filename yields acceleration 8, and the central ACS location is positive for all frames.
+
+5. Run a one-case debug inference into a separate output folder:
 
 ```bash
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base.json \
-  -i /home/students/studxuzho1/dataset_v1/json_input \
-  -o /home/students/studxuzho1/dataset_v1/output
+  -i dataset/CustomCINEDataR1/json_input \
+  -o output/CustomCINEOutputDebugR1 \
+  --debug --profile-timing
 ```
 
-Observed successful log summary:
+`--debug` processes only the first sorted JSON descriptor. Confirm these files afterward:
 
 ```text
-#Total test files before filtering: 5
-#Total test files after filtering: 5
-#Test files: 5
-#model_params: 758.91M
-100%|...| 5/5 [2:22:50<00:00, 1714.13s/it]
-inference completed! test elapsed time: 142.85 mins
+output/CustomCINEOutputDebugR1/config.json
+output/CustomCINEOutputDebugR1/val_img4ranking/Sub0001.mat
 ```
 
-Output reconstructions are written to:
+6. Run all five cases into the production output folder:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR1/json_input \
+  -o output/CustomCINEOutputR1 \
+  --profile-timing
+```
+
+The exact production output tree is:
 
 ```text
-/home/students/studxuzho1/dataset_v1/output/val_img4ranking
+output/CustomCINEOutputR1/
+  config.json
+  val_img4ranking/
+    Sub0001.mat
+    Sub0002.mat
+    Sub0003.mat
+    Sub0004.mat
+    Sub0005.mat
 ```
 
-Visualization command:
+A previous five-case server run completed successfully in approximately 142.85 minutes and reported five input files before and after filtering. Runtime depends on the server GPU and current workload.
+
+Each MAT file contains key `img4ranking`. Despite the legacy folder/key name, current code saves the full magnitude reconstruction. Expected shape for these cases is `(176, 132, 12, 25)` = `(frequency, phase, slice, time)` and dtype is `float32`.
+
+Inference skips a JSON when its corresponding MAT already exists under the selected output folder. To force a clean re-run without deleting results, use another `R1`-named output directory such as `output/CustomCINEOutputRerun01R1`. The conversion scripts similarly refuse to replace existing MAT files unless `--overwrite` is supplied.
+
+7. Inspect output keys, shapes, and numeric ranges:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import numpy as np
+import scipy.io
+
+root = Path('output/CustomCINEOutputR1/val_img4ranking')
+for path in sorted(root.glob('Sub000*.mat')):
+    image = scipy.io.loadmat(path)['img4ranking']
+    print(path.name, image.shape, image.dtype, np.isfinite(image).all(), image.min(), image.max())
+PY
+```
+
+Expected shape line pattern:
+
+```text
+Sub0001.mat (176, 132, 12, 25) float32 True <minimum> <maximum>
+```
+
+8. Generate PNG grids in the output visualization folder:
 
 ```bash
 python scripts/visualize_mat.py \
-  /home/students/studxuzho1/dataset_v1/output/val_img4ranking \
-  -o /home/students/studxuzho1/dataset_v1/output/figs
+  output/CustomCINEOutputR1/val_img4ranking \
+  -o output/CustomCINEOutputR1/figs
 ```
 
-Confirmed generated PNGs:
+This creates:
 
 ```text
-/home/students/studxuzho1/dataset_v1/output/figs/Sub0001.png
-/home/students/studxuzho1/dataset_v1/output/figs/Sub0002.png
-/home/students/studxuzho1/dataset_v1/output/figs/Sub0003.png
-/home/students/studxuzho1/dataset_v1/output/figs/Sub0004.png
-/home/students/studxuzho1/dataset_v1/output/figs/Sub0005.png
+output/CustomCINEOutputR1/figs/Sub0001.png
+...
+output/CustomCINEOutputR1/figs/Sub0005.png
 ```
+
+9. Align normalized ground truth for evaluation:
+
+```python
+import numpy as np
+import scipy.io
+
+pred = scipy.io.loadmat(
+    "output/CustomCINEOutputR1/val_img4ranking/Sub0001.mat"
+)["img4ranking"]                                           # (176, 132, 12, 25)
+
+gt = np.load(
+    "/home/students/studxuzho1/dataset_v0/norm_img/norm_img_Sub0001.npy"
+)                                                          # (12, 25, 132, 176, 1)
+gt = np.abs(gt[..., 0]).transpose(3, 2, 0, 1)              # (176, 132, 12, 25)
+
+assert pred.shape == gt.shape, (pred.shape, gt.shape)
+```
+
+This shape/orientation alignment does not guarantee that prediction and ground-truth intensity normalization are identical. Confirm the ground-truth normalization method before interpreting PSNR, SSIM, or NMSE values.
 
 ## How This Repo Is Usually Run
 
@@ -357,7 +541,7 @@ python scripts/inference.py ...
 - Raw H5 data and source masks are read-only and must not be copied into or modified by this repository.
 - Mask filenames influence acceleration parsing in the current reader pipeline.
 - Fixed masks need a positive central ACS region when `use_acs_region=true`.
-- The conversion scripts documented above may exist only on the server and are not currently present in this local repository.
+- The custom CINE k-space and VISTA mask converters are available locally under `scripts/`, together with a pre-inference validator.
 
 ## Current Research / Experiment Notes
 
