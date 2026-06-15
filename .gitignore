@@ -20,6 +20,25 @@ data/
 dataset/
 cache/
 
+# Keep the custom CINE directory skeleton; generated data remains ignored.
+!dataset/
+dataset/*
+!dataset/CustomCINEDataR1/
+dataset/CustomCINEDataR1/*
+!dataset/CustomCINEDataR1/json_input/
+dataset/CustomCINEDataR1/json_input/*
+!dataset/CustomCINEDataR1/json_input/.gitkeep
+!dataset/CustomCINEDataR1/MultiCoil/
+dataset/CustomCINEDataR1/MultiCoil/*
+!dataset/CustomCINEDataR1/MultiCoil/Cine/
+dataset/CustomCINEDataR1/MultiCoil/Cine/*
+!dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/
+dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/*
+!dataset/CustomCINEDataR1/MultiCoil/Cine/UnderSample_TaskR1/.gitkeep
+!dataset/CustomCINEDataR1/MultiCoil/Cine/Mask_TaskR1/
+dataset/CustomCINEDataR1/MultiCoil/Cine/Mask_TaskR1/*
+!dataset/CustomCINEDataR1/MultiCoil/Cine/Mask_TaskR1/.gitkeep
+
 # MRI raw / converted data
 *.h5
 *.hdf5
@@ -30,6 +49,23 @@ cache/
 # Training / inference outputs
 outputs/
 output*/
+
+# Keep the custom CINE output skeleton; generated results remain ignored.
+!output/
+output/*
+!output/CustomCINEOutputR1/
+output/CustomCINEOutputR1/*
+!output/CustomCINEOutputR1/val_img4ranking/
+output/CustomCINEOutputR1/val_img4ranking/*
+!output/CustomCINEOutputR1/val_img4ranking/.gitkeep
+!output/CustomCINEOutputR1/figs/
+output/CustomCINEOutputR1/figs/*
+!output/CustomCINEOutputR1/figs/.gitkeep
+!output/CustomCINEOutputDebugR1/
+output/CustomCINEOutputDebugR1/*
+!output/CustomCINEOutputDebugR1/val_img4ranking/
+output/CustomCINEOutputDebugR1/val_img4ranking/*
+!output/CustomCINEOutputDebugR1/val_img4ranking/.gitkeep
 exp/
 tfevents/
 runs/
