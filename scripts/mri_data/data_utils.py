@@ -12,6 +12,7 @@
 import math
 from typing import Sequence
 
+import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange
