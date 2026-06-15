@@ -187,7 +187,10 @@ def infer(args):
     model.eval()
     with torch.no_grad():
         tic_val = time.time()
+        previous_case_end = tic_val
         for test_data in tqdm.tqdm(test_loader):
+            case_start = time.perf_counter()
+            timings = {"data_load": case_start - previous_case_end}
             (
                 input,
                 mask,
@@ -213,6 +216,7 @@ def infer(args):
             )
             if args.debug:
                 print(file_name, mask_type, acc_factor, acq_type)
+            prepare_start = time.perf_counter()
             final_shape = [int(s) for s in final_shape]
             input = (
                 fftn_centered(input, spatial_dims=2, is_complex=True)
@@ -223,6 +227,11 @@ def infer(args):
             # iterate through all samples:
             num_samples = input.shape[0]
             outputs = []
+            timings["prepare"] = time.perf_counter() - prepare_start
+            timings["window_and_transfer"] = 0.0
+            timings["model"] = 0.0
+            timings["output"] = 0.0
+            num_forwards = 0
             for micro_b, _ in mini_dataloader(
                 list(range(num_samples)),
                 args.batch_size,
@@ -231,6 +240,7 @@ def infer(args):
                 pad_last=False,
             ):
                 # forward pass
+                stage_start = time.perf_counter()
                 inp, window_idx = windowed_input(input, micro_b, final_shape, num_frames=args.num_frames)
                 mas = torch.Tensor(mask[window_idx])
                 inp, mas, mean, std = (
@@ -239,16 +249,35 @@ def infer(args):
                     mean.to(device),
                     std.to(device),
                 )
+                if args.profile_timing and torch.cuda.is_available():
+                    torch.cuda.synchronize(device)
+                timings["window_and_transfer"] += time.perf_counter() - stage_start
 
+                stage_start = time.perf_counter()
                 with autocast("cuda", torch.bfloat16, enabled=args.amp):
                     output = model(inp, mas.bool(), mask_type, acc_factor, acq_type)
+                if args.profile_timing and torch.cuda.is_available():
+                    torch.cuda.synchronize(device)
+                timings["model"] += time.perf_counter() - stage_start
 
+                stage_start = time.perf_counter()
                 output = output[:, args.num_frames // 2]
                 output = output * std[micro_b] + mean[micro_b]  # [1, c/1, 320, 320, 2]
                 output = complex_abs(crop_k_space(output, (final_shape[-2], final_shape[-1])))  # [b, c/1, 320, 320]
 
                 outputs.append(output.data.cpu().numpy())
+                timings["output"] += time.perf_counter() - stage_start
+                num_forwards += 1
+                if args.profile_timing and num_forwards % args.profile_interval == 0:
+                    elapsed = time.perf_counter() - case_start
+                    eta = elapsed / num_forwards * (num_samples - num_forwards)
+                    print(
+                        f"\n[timing] {Path(file_name).name}: {num_forwards}/{num_samples} forwards, "
+                        f"elapsed={elapsed:.1f}s, estimated_remaining={eta:.1f}s",
+                        flush=True,
+                    )
 
+            stage_start = time.perf_counter()
             outputs = rearrange_mri_data(
                 [np.vstack(outputs)],
                 args,
@@ -258,9 +287,13 @@ def infer(args):
                 num_coils=final_shape[-3],
                 temporal_shuffle=temporal_shuffle,
             )  # (time), slice, coil, h, w
+            timings["rearrange"] = time.perf_counter() - stage_start
 
+            stage_start = time.perf_counter()
             outputs_rss = np.sqrt(np.sum(outputs[0] ** 2, axis=-3))  # RSS: (time), slice, h, w
+            timings["rss"] = time.perf_counter() - stage_start
 
+            stage_start = time.perf_counter()
             outputs_pp = postprocess_mri_recon(
                 outputs_rss,
                 args,
@@ -268,12 +301,27 @@ def infer(args):
                 is_training=False,
                 pp_z_score_norm=args.pp_z_score_norm,
             )  # w, h, slice, (time)
+            timings["postprocess"] = time.perf_counter() - stage_start
 
+            stage_start = time.perf_counter()
             save_img4ranking(
                 outputs_pp,
                 os.path.join(args.output_path, "val_img4ranking"),
                 file_name.replace(".json", ".mat"),
             )
+            timings["save_mat"] = time.perf_counter() - stage_start
+
+            case_end = time.perf_counter()
+            timings["total"] = case_end - case_start
+            if args.profile_timing:
+                timing_text = ", ".join(f"{name}={seconds:.2f}s" for name, seconds in timings.items())
+                per_forward = timings["model"] / max(num_forwards, 1)
+                print(
+                    f"\n[timing] {Path(file_name).name}: samples={num_samples}, forwards={num_forwards}, "
+                    f"model_per_forward={per_forward:.3f}s, {timing_text}",
+                    flush=True,
+                )
+            previous_case_end = case_end
 
         if args.ddp:
             # wait for all processes to finish
@@ -328,6 +376,18 @@ if __name__ == "__main__":
         default=False,
         help="Debug mode",
     )
+    parser.add_argument(
+        "--profile-timing",
+        action="store_true",
+        default=False,
+        help="Print synchronized per-case inference timing broken down by processing stage",
+    )
+    parser.add_argument(
+        "--profile-interval",
+        type=int,
+        default=25,
+        help="Forward-pass interval for live timing updates (default: 25)",
+    )
 
     args = parser.parse_args()
     config = load_config(args.config)
@@ -337,6 +397,8 @@ if __name__ == "__main__":
     config.output_path = args.output_path
     config.data_path_test = args.input_path
     config.debug = args.debug
+    config.profile_timing = args.profile_timing
+    config.profile_interval = max(args.profile_interval, 1)
     if config.ddp and ("MASTER_PORT" not in os.environ.keys()):
         port = str(find_free_network_port())
         print(f"using port {port}")
