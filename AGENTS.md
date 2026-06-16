@@ -393,6 +393,76 @@ assert pred.shape == gt.shape, (pred.shape, gt.shape)
 
 This shape/orientation alignment does not guarantee that prediction and ground-truth intensity normalization are identical. Confirm the ground-truth normalization method before interpreting PSNR, SSIM, or NMSE values.
 
+#### Acc16 / R2 Dataset Variant
+
+For the second experiment, keep `dataset/CustomCINEDataR1` as the established acc8 dataset and create a separate acc16 dataset root:
+
+```text
+dataset/CustomCINEDataR2/
+  MultiCoil/
+    Cine/
+      UnderSample_TaskR1/
+        Sub0001_kspace_full.mat  # symlink to R1 k-space by default
+        ...
+      Mask_TaskR1/
+        Sub0001_mask_ktRadial16.mat
+        ...
+  json_input/
+    Sub0001.json
+    ...
+```
+
+Use seed `8` for acc16 to match the acc8 sanity run seed while changing only the acceleration:
+
+```bash
+python scripts/create_custom_cine_acc_dataset.py \
+  --source-root dataset/CustomCINEDataR1 \
+  --output-root dataset/CustomCINEDataR2 \
+  --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
+  --mask-glob 'mask_VISTA_132x25_acc16_8.txt' \
+  --mask-type ktRadial16 \
+  --case-glob 'Sub000[1-5]_kspace_full.mat' \
+  --frequency-size 176 \
+  --acs-lines 20
+```
+
+By default, this script creates symlinks to the R1 k-space MAT files instead of duplicating large full k-space data. Use `--kspace-mode copy` only if the server environment cannot follow symlinks.
+
+Validate R2 before inference:
+
+```bash
+python scripts/validate_cine_inference_data.py \
+  dataset/CustomCINEDataR2/json_input
+```
+
+Run a one-case R2 debug inference:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR2/json_input \
+  -o output/CustomCINEOutputDebugR2 \
+  --debug --profile-timing
+```
+
+Run all five R2 cases:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR2/json_input \
+  -o output/CustomCINEOutputR2 \
+  --profile-timing
+```
+
+Visualize R2 outputs:
+
+```bash
+python scripts/visualize_mat.py \
+  output/CustomCINEOutputR2/val_img4ranking \
+  -o output/CustomCINEOutputR2/figs
+```
+
 ## How This Repo Is Usually Run
 
 This repo is usually run on a server, not fully locally.

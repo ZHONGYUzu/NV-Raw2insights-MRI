@@ -108,6 +108,32 @@ For this repository layout, `scripts/inference.py` defaults to input
 `output/CustomCINEOutputR1`. Explicit `-i` and `-o` arguments still override
 these defaults.
 
+### Acc16 / R2 Variant
+
+To run the same five cases with the acc16 seed-8 VISTA mask, create a separate
+dataset root and output root:
+
+```bash
+python scripts/create_custom_cine_acc_dataset.py \
+  --source-root dataset/CustomCINEDataR1 \
+  --output-root dataset/CustomCINEDataR2 \
+  --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
+  --mask-glob 'mask_VISTA_132x25_acc16_8.txt' \
+  --mask-type ktRadial16
+
+python scripts/validate_cine_inference_data.py \
+  dataset/CustomCINEDataR2/json_input
+
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR2/json_input \
+  -o output/CustomCINEOutputR2 \
+  --profile-timing
+```
+
+The R2 builder symlinks to the R1 k-space MAT files by default and writes new
+`ktRadial16` mask MATs and JSON descriptors under `dataset/CustomCINEDataR2`.
+
 ## Running Inference
 
 ### Single-GPU
