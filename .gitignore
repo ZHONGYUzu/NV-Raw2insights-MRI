@@ -53,6 +53,21 @@ dataset/CustomCINEDataR2/MultiCoil/Cine/UnderSample_TaskR1/*
 !dataset/CustomCINEDataR2/MultiCoil/Cine/Mask_TaskR1/
 dataset/CustomCINEDataR2/MultiCoil/Cine/Mask_TaskR1/*
 !dataset/CustomCINEDataR2/MultiCoil/Cine/Mask_TaskR1/.gitkeep
+!dataset/CustomCINEDataR3/
+dataset/CustomCINEDataR3/*
+!dataset/CustomCINEDataR3/json_input/
+dataset/CustomCINEDataR3/json_input/*
+!dataset/CustomCINEDataR3/json_input/.gitkeep
+!dataset/CustomCINEDataR3/MultiCoil/
+dataset/CustomCINEDataR3/MultiCoil/*
+!dataset/CustomCINEDataR3/MultiCoil/Cine/
+dataset/CustomCINEDataR3/MultiCoil/Cine/*
+!dataset/CustomCINEDataR3/MultiCoil/Cine/UnderSample_TaskR1/
+dataset/CustomCINEDataR3/MultiCoil/Cine/UnderSample_TaskR1/*
+!dataset/CustomCINEDataR3/MultiCoil/Cine/UnderSample_TaskR1/.gitkeep
+!dataset/CustomCINEDataR3/MultiCoil/Cine/Mask_TaskR1/
+dataset/CustomCINEDataR3/MultiCoil/Cine/Mask_TaskR1/*
+!dataset/CustomCINEDataR3/MultiCoil/Cine/Mask_TaskR1/.gitkeep
 
 # MRI raw / converted data
 *.h5
@@ -94,6 +109,19 @@ output/CustomCINEOutputDebugR2/*
 !output/CustomCINEOutputDebugR2/val_img4ranking/
 output/CustomCINEOutputDebugR2/val_img4ranking/*
 !output/CustomCINEOutputDebugR2/val_img4ranking/.gitkeep
+!output/CustomCINEOutputR3/
+output/CustomCINEOutputR3/*
+!output/CustomCINEOutputR3/val_img4ranking/
+output/CustomCINEOutputR3/val_img4ranking/*
+!output/CustomCINEOutputR3/val_img4ranking/.gitkeep
+!output/CustomCINEOutputR3/figs/
+output/CustomCINEOutputR3/figs/*
+!output/CustomCINEOutputR3/figs/.gitkeep
+!output/CustomCINEOutputDebugR3/
+output/CustomCINEOutputDebugR3/*
+!output/CustomCINEOutputDebugR3/val_img4ranking/
+output/CustomCINEOutputDebugR3/val_img4ranking/*
+!output/CustomCINEOutputDebugR3/val_img4ranking/.gitkeep
 exp/
 tfevents/
 runs/

@@ -134,6 +134,26 @@ python scripts/inference.py \
 The R2 builder symlinks to the R1 k-space MAT files by default and writes new
 `ktRadial16` mask MATs and JSON descriptors under `dataset/CustomCINEDataR2`.
 
+For acc24, use the same helper with the R3 dataset/output roots:
+
+```bash
+python scripts/create_custom_cine_acc_dataset.py \
+  --source-root dataset/CustomCINEDataR1 \
+  --output-root dataset/CustomCINEDataR3 \
+  --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
+  --mask-glob 'mask_VISTA_132x25_acc24_8.txt' \
+  --mask-type ktRadial24
+
+python scripts/validate_cine_inference_data.py \
+  dataset/CustomCINEDataR3/json_input
+
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CustomCINEDataR3/json_input \
+  -o output/CustomCINEOutputR3 \
+  --profile-timing
+```
+
 ## Running Inference
 
 ### Single-GPU
