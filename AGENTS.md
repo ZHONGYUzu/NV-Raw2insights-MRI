@@ -182,13 +182,31 @@ dataset/CustomCINEDataR1/
     Sub0005.json
 ```
 
-Create a new first-level `output/` folder beside `dataset/`, not inside it. The result subfolder uses the `R1` suffix to match the input dataset:
+Create a new first-level `output/` folder beside `dataset/`, not inside it. The result subfolder uses the same custom experiment suffix as the input dataset:
 
 ```text
 output/CustomCINEOutputR1
 ```
 
 These are the default custom-CINE paths in `scripts/inference.py`, so the production run can omit `-i` and `-o`. Keeping them explicit in documented commands makes the selected experiment paths clear.
+
+#### Custom CINE Experiment Naming Map
+
+Do not confuse the two naming layers:
+
+- `UnderSample_TaskR1` and `Mask_TaskR1` are CMRxRecon-style task folder names kept for reader compatibility. These stay the same for all custom CINE variants.
+- `CustomCINEDataR1`, `CustomCINEDataR2`, and `CustomCINEDataR3` are this repo's custom experiment dataset roots. Here, `R1/R2/R3` are experiment labels, not acceleration factors.
+- `CustomCINEOutputR1`, `CustomCINEOutputR2`, and `CustomCINEOutputR3` are the matching inference output roots.
+
+Current mapping:
+
+| Custom label | Mask acceleration | Source TXT mask | Dataset root | Output root |
+| --- | --- | --- | --- | --- |
+| `R1` | acc8 | `mask_VISTA_132x25_acc8_8.txt` | `dataset/CustomCINEDataR1` | `output/CustomCINEOutputR1` |
+| `R2` | acc16 | `mask_VISTA_132x25_acc16_8.txt` | `dataset/CustomCINEDataR2` | `output/CustomCINEOutputR2` |
+| `R3` | acc24 | `mask_VISTA_132x25_acc24_8.txt` | `dataset/CustomCINEDataR3` | `output/CustomCINEOutputR3` |
+
+All three use the same full k-space source data. R2 and R3 symlink to R1 k-space by default and only replace the fixed mask and JSON descriptors.
 
 1. Confirm the repository files and source inputs:
 
