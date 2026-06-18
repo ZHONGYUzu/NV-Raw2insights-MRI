@@ -114,8 +114,9 @@ def save_case_grid(
         axes[0, col].set_title(title)
         for row, (row_label, image, cmap, vmax) in enumerate(panels):
             axis = axes[row, col]
-            axis.imshow(image.T, cmap=cmap, origin="lower", vmax=vmax)
+            im = axis.imshow(image.T, cmap=cmap, origin="lower", vmax=vmax)
             axis.axis("off")
+            fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
             if col == 0:
                 axis.set_ylabel(row_label, rotation=0, ha="right", va="center", labelpad=42, fontsize=12)
 
