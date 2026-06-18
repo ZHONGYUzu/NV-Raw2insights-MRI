@@ -142,6 +142,8 @@ scripts/convert_vista_txt_mask_to_mat.py
 scripts/validate_cine_inference_data.py
 scripts/inference.py
 scripts/visualize_mat.py
+scripts/plot_cine_acc_comparison.py
+scripts/evaluate_cine_acc_metrics.py
 configs/nv_raw2insights_mri_base.json
 ```
 
@@ -410,6 +412,45 @@ assert pred.shape == gt.shape, (pred.shape, gt.shape)
 ```
 
 This shape/orientation alignment does not guarantee that prediction and ground-truth intensity normalization are identical. Confirm the ground-truth normalization method before interpreting PSNR, SSIM, or NMSE values.
+
+10. Compare acceleration settings visually for a selected slice/time frame:
+
+```bash
+python scripts/plot_cine_acc_comparison.py \
+  --acc acc8=output/CustomCINEOutputR1/val_img4ranking \
+  --acc acc16=output/CustomCINEOutputR2/val_img4ranking \
+  --acc acc24=output/CustomCINEOutputR3/val_img4ranking \
+  --gt-root /home/students/studxuzho1/dataset_v0/norm_img \
+  --case-glob 'Sub000[1-5].mat' \
+  -o output/acc_comparison_pngs
+```
+
+This script creates GT/reconstruction/error PNG grids with colorbars. It is intended for visual inspection only: it computes metrics only for the selected displayed slice/time frame and does not satisfy full quantitative evaluation requirements.
+
+11. Compute full-size quantitative metrics across acceleration settings:
+
+```bash
+python scripts/evaluate_cine_acc_metrics.py \
+  --acc acc8=output/CustomCINEOutputR1/val_img4ranking \
+  --acc acc16=output/CustomCINEOutputR2/val_img4ranking \
+  --acc acc24=output/CustomCINEOutputR3/val_img4ranking \
+  --gt-root /home/students/studxuzho1/dataset_v0/norm_img \
+  --case-glob 'Sub000[1-5].mat' \
+  -o output/acc_metrics_5subjects
+```
+
+This evaluation script uses the full prediction and reference arrays after orientation matching; it does not apply `run4Ranking`, spatial crop, central-slice selection, or first-three-frame selection. It computes per-frame metrics for every shared subject, every slice, and every temporal frame. With five cases and the documented `12` slices and `25` frames, each acceleration produces `5 x 12 x 25 = 1500` frame-level metric rows. For ten subjects, the expected count is `10 x nSlices x 25` rows per acceleration.
+
+Outputs:
+
+```text
+output/acc_metrics_5subjects/frame_metrics.csv
+output/acc_metrics_5subjects/summary_metrics.csv
+output/acc_metrics_5subjects/metrics_boxplot.png
+output/acc_metrics_5subjects/metrics_violin.png
+```
+
+Default plotted metrics are PSNR, NRMSE, and NMSE. Additional supported metrics are MSE and MAE via `--metrics`.
 
 #### Acc16 / R2 Dataset Variant
 
