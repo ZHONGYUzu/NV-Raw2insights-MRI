@@ -83,6 +83,7 @@ class CMRxReconKeys(StrEnum):
     NUM_COILS = "num_coils"
     NUM_FRAMES = "num_frames"
     SHAPE = "shape"
+    SMAP = "sensitivity_maps"
 
 
 @require_pkg(pkg_name="h5py")
@@ -278,6 +279,16 @@ class CMRxReconReader(ImageReader):
 
         return data_kv
 
+    def read_first_existing(self, paths) -> list:
+        if not paths:
+            return []
+        if isinstance(paths, (str, os.PathLike)):
+            paths = [paths]
+        for path in paths:
+            if path:
+                return self.read_mat(path)
+        return []
+
     def filter_masks_by_types(self, masks, fixed_mask_types):
         result = []
         if not all(fixed_mask_types):
@@ -303,16 +314,28 @@ class CMRxReconReader(ImageReader):
             json_data = json.load(f)
             kspace = json_data["kspace"]
             masks = self.filter_masks_by_types(json_data["mask"], self.fixed_mask_types)
+            if json_data["mask"] and not masks:
+                raise ValueError(
+                    f"No masks matched fixed_mask_types={self.fixed_mask_types}; "
+                    "update --fixed-mask-types/config or disable filtering with --fixed-mask-types none"
+                )
             mask = random.choice(masks) if json_data["mask"] else ""
             mask_type = mask.split("_mask_")[-1][:-4]
             acquisition_type = re.search(r"(?:^|[/\\])MultiCoil[/\\]([^/\\]+)", kspace, flags=re.I).group(1)
+            smap = (
+                json_data.get("sensitivity_maps")
+                or json_data.get("smap")
+                or json_data.get("dMap")
+            )
 
         kspace_kv = self.read_mat(kspace)
         mask_kv = self.read_mat(mask) if mask else [(None, None)]
+        smap_kv = self.read_first_existing(smap)
 
         dat = dict(
             kspace_kv
             + mask_kv
+            + smap_kv
             + [
                 (CMRxReconKeys.FILENAME, os.path.basename(data)),
                 (CMRxReconKeys.MASK_TYPE, mask_type),
@@ -360,6 +383,18 @@ class CMRxReconReader(ImageReader):
         else:
             mask = np.ones([1] * data.ndim)
         header[CMRxReconKeys.MASK] = mask.astype(np.float32)
+        for smap_key in (CMRxReconKeys.SMAP, "smap", "dMap"):
+            if smap_key in dat:
+                if np.issubdtype(dat[smap_key].dtype, np.complexfloating):
+                    smap_shape = dat[smap_key].shape[::-1]
+                    smap_shape = (1,) * (5 - len(smap_shape)) + smap_shape
+                    smap = dat[smap_key].transpose()
+                else:
+                    smap_shape = dat[smap_key]["real"].shape
+                    smap_shape = (1,) * (5 - len(smap_shape)) + smap_shape
+                    smap = np.array(dat[smap_key]["real"] + 1j * dat[smap_key]["imag"])
+                header[CMRxReconKeys.SMAP] = smap.reshape(smap_shape)
+                break
         return data, header
 
     def _get_meta_dict(self, dat: dict) -> dict:

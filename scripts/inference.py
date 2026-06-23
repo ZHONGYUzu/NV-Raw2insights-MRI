@@ -42,6 +42,16 @@ torch.backends.cudnn.enabled = True
 warnings.filterwarnings("ignore")
 
 
+def parse_csv_values(value, cast=str):
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        items = value
+    else:
+        items = str(value).split(",")
+    return [cast(item.strip()) for item in items if str(item).strip()]
+
+
 @record
 def infer(args):
     if args.ddp:
@@ -144,6 +154,7 @@ def infer(args):
             ),
             # user can also add other random transforms but remember to disable randomness for val_transforms
             ExtractDataKeyFromMetaKeyd(keys=["mask", "acquisition"], meta_key="kspace_meta_dict"),
+            ExtractOptionalDataKeyFromMetaKeyd(keys=["sensitivity_maps"], meta_key="kspace_meta_dict"),
             KspaceMaskd(
                 keys=["kspace"],
                 mask_types=(["fixed"] if not hasattr(args, "val_mask_types") else args.val_mask_types),
@@ -153,9 +164,14 @@ def infer(args):
                 is_complex=True,
             ),
             Lambdad(keys=["kspace"], func=lambda x: convert_to_tensor_complex(x)),
+            Lambdad(
+                keys=["sensitivity_maps"],
+                func=lambda x: convert_to_tensor_complex(x),
+                allow_missing_keys=True,
+            ),
             (
                 ResizeWithPadOrCropd(
-                    keys=["kspace", "mask", "kspace_masked"],
+                    keys=["kspace", "mask", "kspace_masked", "sensitivity_maps"],
                     spatial_size=[
                         -1,
                         -1,
@@ -163,17 +179,19 @@ def infer(args):
                         args.uniform_input_kspace[1],
                         2,
                     ],
+                    allow_missing_keys=True,
                 )
                 if args.uniform_input_kspace
                 else Identityd(keys=["kspace"])
             ),
-            EnsureTyped(keys=["kspace", "kspace_masked", "mask"]),
+            EnsureTyped(keys=["kspace", "kspace_masked", "mask", "sensitivity_maps"], allow_missing_keys=True),
             Lambdad(
                 keys=["kspace", "kspace_masked"],
                 overwrite=["kspace_ifft", "kspace_masked_ifft"],
                 func=lambda x: ifftn_centered(x, spatial_dims=2, is_complex=True),
             ),
             RearrangeAndNormalizeMRI(keys=["kspace_masked_ifft", "kspace_ifft", "mask"], args=args),
+            PrepareSensitivityMapd(keys=["sensitivity_maps"], args=args),
         ]
     )
 
@@ -214,6 +232,7 @@ def infer(args):
                 test_data["kspace_meta_dict"]["filename"][0],
                 test_data["kspace_meta_dict"]["shape"][0],
             )
+            sensitivity_maps = test_data["sensitivity_maps"][0] if "sensitivity_maps" in test_data else None
             if args.debug:
                 print(file_name, mask_type, acc_factor, acq_type)
             prepare_start = time.perf_counter()
@@ -243,6 +262,10 @@ def infer(args):
                 stage_start = time.perf_counter()
                 inp, window_idx = windowed_input(input, micro_b, final_shape, num_frames=args.num_frames)
                 mas = torch.Tensor(mask[window_idx])
+                smap = None
+                if sensitivity_maps is not None:
+                    smap, _ = windowed_input(sensitivity_maps, micro_b, final_shape, num_frames=args.num_frames)
+                    smap = smap.to(device)
                 inp, mas, mean, std = (
                     inp.to(device),
                     mas.to(device),
@@ -255,7 +278,7 @@ def infer(args):
 
                 stage_start = time.perf_counter()
                 with autocast("cuda", torch.bfloat16, enabled=args.amp):
-                    output = model(inp, mas.bool(), mask_type, acc_factor, acq_type)
+                    output = model(inp, mas.bool(), mask_type, acc_factor, acq_type, sensitivity_maps=smap)
                 if args.profile_timing and torch.cuda.is_available():
                     torch.cuda.synchronize(device)
                 timings["model"] += time.perf_counter() - stage_start
@@ -388,6 +411,22 @@ if __name__ == "__main__":
         default=25,
         help="Forward-pass interval for live timing updates (default: 25)",
     )
+    parser.add_argument(
+        "--fixed-mask-types",
+        default=None,
+        help="Comma-separated fixed mask filters, for example mask_ktRadial4,mask_ktRadial8. Use 'none' to disable filtering.",
+    )
+    parser.add_argument(
+        "--accelerations",
+        default=None,
+        help="Comma-separated acceleration classes for inference/model conditioning, for example 2,3,4,8,16,24.",
+    )
+    parser.add_argument(
+        "--disable-acs-region",
+        action="store_true",
+        default=False,
+        help="Disable ACS-region extraction for sensitivity-map estimation; useful when masks do not contain a filled ACS center.",
+    )
 
     args = parser.parse_args()
     config = load_config(args.config)
@@ -399,6 +438,14 @@ if __name__ == "__main__":
     config.debug = args.debug
     config.profile_timing = args.profile_timing
     config.profile_interval = max(args.profile_interval, 1)
+    if args.fixed_mask_types is not None:
+        config.fixed_mask_types = None if args.fixed_mask_types.lower() == "none" else parse_csv_values(args.fixed_mask_types)
+    if args.accelerations is not None:
+        config.accelerations = parse_csv_values(args.accelerations, float)
+        if len(getattr(config, "center_fractions", [])) != len(config.accelerations):
+            config.center_fractions = [0.0] * len(config.accelerations)
+    if args.disable_acs_region:
+        config.use_acs_region = False
     if config.ddp and ("MASTER_PORT" not in os.environ.keys()):
         port = str(find_free_network_port())
         print(f"using port {port}")

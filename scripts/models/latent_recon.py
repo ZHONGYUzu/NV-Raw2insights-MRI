@@ -214,15 +214,16 @@ class Flow_SkipConnected_MRI_Recon(nn.Module):
         mask_type: str = None,
         acc_factor: int = None,
         acq_type: str = None,
+        sensitivity_maps=None,
     ) -> torch.Tensor:
         ref_image = x.clone()
         x0 = x
         cas_skips = None
         for i in range(self.num_steps):
-            sensitivity_maps = None
+            step_sensitivity_maps = sensitivity_maps
             if self.constant_input_flow:
                 if self.training:
-                    x, cas_skips, sensitivity_maps = checkpoint(
+                    x, cas_skips, step_sensitivity_maps = checkpoint(
                         self.recon_model,
                         x0,
                         mask,
@@ -230,26 +231,26 @@ class Flow_SkipConnected_MRI_Recon(nn.Module):
                         acc_factor,
                         acq_type,
                         cas_skips,
-                        sensitivity_maps,
+                        step_sensitivity_maps,
                         ref_image,
                         i,
                         use_reentrant=False,
                     )
                 else:
-                    x, cas_skips, sensitivity_maps = self.recon_model(
+                    x, cas_skips, step_sensitivity_maps = self.recon_model(
                         x0,
                         mask,
                         mask_type,
                         acc_factor,
                         acq_type,
                         cas_skips,
-                        sensitivity_maps,
+                        step_sensitivity_maps,
                         ref_image,
                         i,
                     )
             else:
                 if self.training:
-                    x, cas_skips, sensitivity_maps = checkpoint(
+                    x, cas_skips, step_sensitivity_maps = checkpoint(
                         self.recon_model,
                         x,
                         mask,
@@ -257,20 +258,20 @@ class Flow_SkipConnected_MRI_Recon(nn.Module):
                         acc_factor,
                         acq_type,
                         cas_skips,
-                        sensitivity_maps,
+                        step_sensitivity_maps,
                         ref_image,
                         i,
                         use_reentrant=False,
                     )
                 else:
-                    x, cas_skips, sensitivity_maps = self.recon_model(
+                    x, cas_skips, step_sensitivity_maps = self.recon_model(
                         x,
                         mask,
                         mask_type,
                         acc_factor,
                         acq_type,
                         cas_skips,
-                        sensitivity_maps,
+                        step_sensitivity_maps,
                         ref_image,
                         i,
                     )

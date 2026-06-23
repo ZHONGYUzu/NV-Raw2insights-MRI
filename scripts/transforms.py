@@ -41,6 +41,8 @@ __all__ = [
     "RandSimulateNoReadoutOversampleKspaced",
     "RandAdjustContrastKspaced",
     "RearrangeAndNormalizeMRI",
+    "ExtractOptionalDataKeyFromMetaKeyd",
+    "PrepareSensitivityMapd",
     "SimulateLowerAccFactorKspaceMask",
     "RandResizeWithPadOrCropd",
 ]
@@ -124,6 +126,69 @@ class KspaceMask(RandomizableTransform):
         center_fraction = self.center_fractions[choice]
         acceleration = self.accelerations[choice]
         return center_fraction, acceleration
+
+
+class ExtractOptionalDataKeyFromMetaKeyd(MapTransform):
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+
+    def __init__(
+        self,
+        keys: KeysCollection,
+        meta_key: str,
+        allow_missing_keys: bool = True,
+    ) -> None:
+        MapTransform.__init__(self, keys, allow_missing_keys)
+        self.meta_key = meta_key
+
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> dict[Hashable, Tensor]:
+        d = dict(data)
+        meta = d.get(self.meta_key, {})
+        for key in self.keys:
+            if key in meta:
+                d[key] = meta[key]
+        return d
+
+
+class PrepareSensitivityMapd(MapTransform):
+    backend = [TransformBackends.TORCH]
+
+    def __init__(
+        self,
+        keys: KeysCollection,
+        args,
+        meta_key: str = "kspace_meta_dict",
+        allow_missing_keys: bool = True,
+    ) -> None:
+        MapTransform.__init__(self, keys, allow_missing_keys)
+        self.args = args
+        self.meta_key = meta_key
+
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> dict[Hashable, Tensor]:
+        d = dict(data)
+        meta = d.get(self.meta_key, {})
+        kspace_shape = meta.get(CMRxReconKeys.SHAPE, None)
+        if kspace_shape is None:
+            kspace_shape = meta.get(CMRxReconKeys.SHAPE.value, None)
+        if kspace_shape is None:
+            return d
+
+        total_frames = int(kspace_shape[0])
+        for key in self.key_iterator(d):
+            smap = convert_to_tensor(d[key], track_meta=get_track_meta())
+            if smap.ndim == 5 and smap.shape[-1] != 2:
+                smap = convert_to_tensor_complex(smap)
+            if smap.ndim != 6 or smap.shape[-1] != 2:
+                raise ValueError(
+                    f"{key} must have logical shape (time, slice, coil, phase, frequency, 2), got {tuple(smap.shape)}"
+                )
+            if smap.shape[0] == 1 and total_frames > 1:
+                smap = smap.expand(total_frames, -1, -1, -1, -1, -1)
+            elif smap.shape[0] != total_frames:
+                raise ValueError(
+                    f"{key} time size {smap.shape[0]} must be 1 or match k-space time size {total_frames}"
+                )
+            d[key] = rearrange_mri_data([smap[None, ...]], self.args).contiguous()
+        return d
 
 
 class ConvertPseudo3Dto3D(MapTransform):

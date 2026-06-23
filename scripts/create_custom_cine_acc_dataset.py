@@ -61,9 +61,20 @@ def convert_mask(mask_txt: Path, output_path: Path, frequency_size: int, acs_lin
     save_mat_atomic(output_path, {"mask": mask})
 
 
-def write_json(json_path: Path, kspace_path: Path, mask_path: Path) -> None:
+def read_source_smap(source_root: Path, case_id: str) -> str | None:
+    source_json = source_root / "json_input" / f"{case_id}.json"
+    if not source_json.exists():
+        return None
+    with source_json.open() as f:
+        descriptor = json.load(f)
+    return descriptor.get("sensitivity_maps") or descriptor.get("smap") or descriptor.get("dMap")
+
+
+def write_json(json_path: Path, kspace_path: Path, mask_path: Path, smap_path: str | None = None) -> None:
     json_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = {"kspace": str(kspace_path), "mask": [str(mask_path)]}
+    if smap_path:
+        descriptor["sensitivity_maps"] = smap_path
     with json_path.open("w") as f:
         json.dump(descriptor, f, indent=2)
         f.write("\n")
@@ -79,6 +90,11 @@ def main() -> None:
     parser.add_argument("--case-glob", default="Sub000[1-5]_kspace_full.mat")
     parser.add_argument("--frequency-size", type=int, default=176)
     parser.add_argument("--acs-lines", type=int, default=20)
+    parser.add_argument(
+        "--no-force-acs",
+        action="store_true",
+        help="Do not force central ACS phase lines to 1; equivalent to --acs-lines 0.",
+    )
     parser.add_argument("--kspace-mode", choices=("symlink", "copy"), default="symlink")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -86,6 +102,7 @@ def main() -> None:
     if not re.fullmatch(r"[A-Za-z_]+\d+", args.mask_type):
         raise ValueError("--mask-type must end in the intended acceleration, for example ktRadial16")
     mask_txt = choose_single_mask(args.input_mask_dir, args.mask_glob)
+    acs_lines = 0 if args.no_force_acs else args.acs_lines
 
     source_kspace_dir = args.source_root / "MultiCoil" / "Cine" / "UnderSample_TaskR1"
     source_kspaces = sorted(source_kspace_dir.glob(args.case_glob))
@@ -101,10 +118,11 @@ def main() -> None:
         target_kspace = target_kspace_dir / source_kspace.name
         target_mask = target_mask_dir / f"{case_id}_mask_{args.mask_type}.mat"
         target_json = target_json_dir / f"{case_id}.json"
+        smap_path = read_source_smap(args.source_root, case_id)
 
         make_kspace_link_or_copy(source_kspace, target_kspace, args.kspace_mode, args.overwrite)
-        convert_mask(mask_txt, target_mask, args.frequency_size, args.acs_lines, args.overwrite)
-        write_json(target_json, target_kspace, target_mask)
+        convert_mask(mask_txt, target_mask, args.frequency_size, acs_lines, args.overwrite)
+        write_json(target_json, target_kspace, target_mask, smap_path)
         print(f"{case_id}: kspace={target_kspace} mask={target_mask} json={target_json}")
 
 

@@ -1254,11 +1254,13 @@ class restormer_mri(nn.Module):
         x = rearrange(x, "b t c h w two-> (b t) c h w two")
         ref_image = rearrange(ref_image, "b t c h w two-> (b t) c h w two")
         mask = rearrange(mask, "b t c h w two-> (b t) c h w two")
+        if sensitivity_maps is not None and sensitivity_maps.ndim == 6:
+            sensitivity_maps = rearrange(sensitivity_maps, "b t c h w two-> (b t) c h w two")
 
         skip = x.clone()
 
         if self.use_csm:
-            if sensitivity_maps is None or not self.use_single_csm:
+            if sensitivity_maps is None:
                 if self.use_acs_region and mask is not None:
                     x_acs = get_acs_image(x, mask)
                     if self.use_single_csm:
@@ -1279,6 +1281,8 @@ class restormer_mri(nn.Module):
             (i for i, sub in enumerate(self.acq_types) if sub.lower() == acq_type.lower()),
             -1,
         )
+        assert mask_idx != -1, f"mask type {mask_type} not found in {self.mask_types}"
+        assert acc_idx != -1, f"acc factor {acc_factor} not found in {self.acc_factors}"
         assert acq_idx != -1, f"acq type {acq_type} not found in {self.acq_types}"
         x, cas_skips = self.recon_model(
             x,
