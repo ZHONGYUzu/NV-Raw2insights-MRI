@@ -1,6 +1,28 @@
-# FYI: Current Inference Output vs Old Ranking Crop
+# FYI.md
 
-## Why the Current PNG Shows Many Slices and Frames
+Personal project log and detail records for the custom CINE MRI reconstruction
+work. `AGENTS.md` is the operating guide for Codex/agents; this file is for
+human memory, project progress, explanations, and decisions worth keeping.
+
+## 2026-06-23 Documentation Cleanup
+
+Decision:
+
+- Keep `AGENTS.md` as the authoritative agent/runbook file.
+- Keep `FYI.md` as a daily log plus detailed project record.
+- Allow a small amount of intentional overlap for expensive-to-forget facts:
+  output shape, axis order, crop behavior, and supported acceleration rates.
+
+Current documentation split:
+
+| File | Role |
+| --- | --- |
+| `AGENTS.md` | Agent instructions, safe operating rules, conversion/inference commands, paths, and gotchas. |
+| `FYI.md` | Human-readable project memory, explanations, progress notes, and interpretation details. |
+
+## 2026-06-23 Output Visualization Record
+
+Topic: why current PNG outputs show many slices and frames.
 
 For the custom CINE inference output, each saved MAT file contains:
 
@@ -14,7 +36,7 @@ This means:
 (frequency, phase, slice, time)
 ```
 
-So for `Sub0004.mat`:
+For example, for `Sub0004.mat`:
 
 ```text
 frequency/readout = 176
@@ -44,13 +66,14 @@ Therefore the output PNG is:
 12 rows x 25 columns
 ```
 
-For example, `slice=6, time=10` is shown at:
+Example index mapping:
 
 ```text
-row 7, column 11
+slice=6, time=10 -> row 7, column 11
 ```
 
-because both indices are zero-based.
+The displayed row and column are one-based visual positions, while the array
+indices are zero-based.
 
 In code, `visualize_mat.py` treats a 4D array like this:
 
@@ -71,7 +94,7 @@ So `slice=6, time=10` corresponds to:
 img4ranking[:, :, 6, 10]
 ```
 
-## Current Inference Behavior
+## 2026-06-23 Current Inference Behavior Record
 
 Current inference still uses:
 
@@ -81,16 +104,22 @@ output = complex_abs(crop_k_space(output, (final_shape[-2], final_shape[-1])))
 
 This line is in `scripts/inference.py`.
 
-Important: this `crop_k_space()` call is not the old ranking crop.
+Important:
 
-Its purpose is only to restore or keep the model output at the original spatial PE/FE size. For the documented CINE data, that means:
+```text
+crop_k_space != run4Ranking crop
+```
+
+`crop_k_space()` only restores or keeps the model output at the original spatial
+PE/FE size. For the documented CINE data:
 
 ```text
 PE = 132
 FE = 176
 ```
 
-After model inference and spatial-size correction, current postprocessing in `postprocess_mri_recon()` does:
+After model inference and spatial-size correction, current postprocessing in
+`postprocess_mri_recon()` does:
 
 ```python
 recon = recon.transpose()
@@ -111,7 +140,17 @@ For the documented five-case custom CINE data, the expected saved shape is:
 (176, 132, 12, 25)
 ```
 
-## What CMRxReconReader Does
+The legacy output folder and MAT key are still:
+
+```text
+val_img4ranking
+img4ranking
+```
+
+These names are retained for compatibility, but the array is no longer the old
+cropped ranking array.
+
+## 2026-06-23 Reader And Axis Record
 
 `CMRxReconReader` is the CMRxRecon-style loader used by the current inference
 pipeline. It reads each case JSON, loads the referenced k-space and mask MAT
@@ -126,7 +165,7 @@ canonical logical order:
 For the custom CINE source data:
 
 ```text
-raw H5 kSpace:      (slice, coil, time, PE, FE) = (12, 15, 25, 132, 176)
+raw H5 kSpace:          (slice, coil, time, PE, FE) = (12, 15, 25, 132, 176)
 reader logical k-space: (time, slice, coil, PE, FE) = (25, 12, 15, 132, 176)
 ```
 
@@ -158,10 +197,75 @@ Do not replace the custom converter with a plain `savemat()` of
 (FE, PE, coil, slice, time) = (176, 132, 15, 12, 25)
 ```
 
-## Supported Acceleration Rates
+## 2026-06-23 Source H5 Key Record
+
+The custom CINE source H5 files use a dataset-specific schema with three main
+keys:
+
+| H5 key | Meaning | Shape in documented data |
+| --- | --- | --- |
+| `kSpace` | Fully sampled coil-resolved k-space. This is the raw multi-coil reconstruction input before any VISTA undersampling mask is applied. | `(slice, coil, time, PE, FE)` = `(12, 15, 25, 132, 176)` |
+| `dMap` | Coil sensitivity maps, also called `smap`, sensitivity maps, or CSM. These describe how each coil sees the image spatially and are used for sensitivity-map coil combination. | `(slice, coil, 1, PE, FE)` = `(12, 15, 1, 132, 176)` |
+| `dImgC` | Coil-combined fully sampled image data. The channel dimension is `1` because the coil dimension has already been combined. | `(slice, 1, time, PE, FE)` = `(12, 1, 25, 132, 176)` |
+
+`dMap` has a singleton time dimension because the sensitivity maps are
+time-averaged/static and reused across the cardiac frames.
+
+These key names are not universal H5 rules. HDF5 is a flexible container format,
+so another MRI H5 dataset can use different key names, groups, attributes, and
+array layouts. For this project, treat `kSpace`, `dMap`, and `dImgC` as the
+expected schema for the documented custom CINE source files.
+
+## 2026-06-23 Ground Truth Reference Record
+
+There are two reasonable fully sampled reference images that can be derived
+from the same source H5 file.
+
+`dImgC` GT uses the image that is already reconstructed and coil-combined inside
+the H5 file:
+
+```text
+dImgC -> take channel 0 -> magnitude -> normalize -> evaluation orientation
+```
+
+This is simple and useful as a sanity-check reference, but it depends on the
+coil-combination and preprocessing method used when the H5 was originally
+created.
+
+`kSpace+dMap` GT reconstructs the reference explicitly from the full multi-coil
+k-space and sensitivity maps:
+
+```text
+kSpace -> centered inverse FFT -> coil images
+       -> combine coils with dMap sensitivity maps
+       -> magnitude -> normalize -> evaluation orientation
+```
+
+The sensitivity-map combination is:
+
+```python
+coil_img = ifft2c(kSpace)
+combined = np.sum(coil_img * np.conj(dMap), axis=1) / (
+    np.sum(np.abs(dMap) ** 2, axis=1) + 1e-8
+)
+```
+
+Both references should show the same anatomy, but they may not be numerically
+identical because of differences in coil-combination method, FFT centering,
+sensitivity-map normalization, phase handling, intensity normalization, or
+vendor/export preprocessing.
+
+Current decision:
+
+- Use `kSpace+dMap` as the more explicit generated GT method.
+- Use `dImgC` as a sanity-check reference unless the source data owner documents
+  `dImgC` as the official evaluation target.
+
+## 2026-06-23 Acceleration Support Record
 
 For the current `nv_raw2insights_mri_small`, `nv_raw2insights_mri_base`, and
-`nv_raw2insights_mri_large` configs, the supported acceleration rates are:
+`nv_raw2insights_mri_large` configs, the confirmed supported acceleration rates
+are:
 
 ```text
 8, 16, 24
@@ -206,12 +310,14 @@ conditioning labels from the configured `accelerations` list. With the default
 configs, an acceleration such as `6` is not found and becomes an out-of-config
 conditioning case.
 
-Therefore, for the current pretrained foundation-model inference path, treat
-only `8`, `16`, and `24` as confirmed supported rates. Other acceleration rates
-require an explicit config change and separate validation; they should be
-considered out-of-distribution for the current configs/checkpoints.
+Current decision:
 
-## Old Ranking Crop Behavior
+- Treat only `8`, `16`, and `24` as confirmed supported rates for the current
+  pretrained foundation-model inference path.
+- Treat other acceleration rates as out-of-distribution unless there is an
+  explicit config change and separate validation.
+
+## Historical Record: Old Ranking Crop Behavior
 
 The old behavior used `run4Ranking()` from `scripts/run4ranking.py`.
 
@@ -264,9 +370,10 @@ not the current:
 12 rows x 25 columns
 ```
 
-## Why an Older PNG May Have Looked Like One Slice and One Frame
+## Historical Record: Why An Older PNG May Have Looked Like One Slice And One Frame
 
-If a previous PNG looked like only one slice and one frame, likely reasons include:
+If a previous PNG looked like only one slice and one frame, likely reasons
+include:
 
 ```text
 the saved MAT was already 2D
@@ -276,19 +383,7 @@ the file came from a selected/cropped debug result
 the old ranking protocol had already reduced the output before visualization
 ```
 
-The current output is intentionally full-size. The legacy folder name:
-
-```text
-val_img4ranking
-```
-
-and MAT key:
-
-```text
-img4ranking
-```
-
-are retained for compatibility, but the array is no longer the old cropped ranking array.
+The current output is intentionally full-size.
 
 ## Short Version
 
@@ -313,7 +408,7 @@ model output
 -> save small ranking array
 ```
 
-The key distinction:
+Key distinction:
 
 ```text
 crop_k_space != run4Ranking crop
@@ -321,4 +416,5 @@ crop_k_space != run4Ranking crop
 
 `crop_k_space()` is a spatial-size correction around the model output.
 
-`run4Ranking()` was an evaluation/ranking-specific reduction that intentionally discarded most slices, most time frames, and much of the spatial field of view.
+`run4Ranking()` was an evaluation/ranking-specific reduction that intentionally
+discarded most slices, most time frames, and much of the spatial field of view.
