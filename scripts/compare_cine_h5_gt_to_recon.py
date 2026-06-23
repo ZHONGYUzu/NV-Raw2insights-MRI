@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare a full-sampled CINE H5 reference against a saved reconstruction."""
+"""Compare a CINE reference image against a saved reconstruction."""
 
 from __future__ import annotations
 
@@ -52,6 +52,14 @@ def h5_gt_from_dimgc(path: Path) -> np.ndarray:
     return magnitude.transpose(3, 2, 0, 1)  # (frequency, phase, slice, time)
 
 
+def gt_from_norm_npy(path: Path) -> np.ndarray:
+    gt = np.load(path)
+    if gt.ndim != 5 or gt.shape[-1] != 1:
+        raise ValueError(f"{path}: expected shape (slice, time, phase, frequency, 1), got {gt.shape}")
+    magnitude = np.abs(gt[..., 0]).astype(np.float32)  # (slice, time, phase, frequency)
+    return magnitude.transpose(3, 2, 0, 1)  # (frequency, phase, slice, time)
+
+
 def normalize_by(value: np.ndarray, mode: str) -> np.ndarray:
     value = value.astype(np.float32, copy=False)
     if mode == "none":
@@ -98,7 +106,14 @@ def print_stats(name: str, value: np.ndarray) -> None:
     print(f"{name} percentiles [0,1,50,95,99,99.5,99.9,100]: {percentiles}")
 
 
-def save_png(reference: np.ndarray, prediction: np.ndarray, output_path: Path, slice_index: int, time_index: int) -> None:
+def save_png(
+    reference: np.ndarray,
+    prediction: np.ndarray,
+    output_path: Path,
+    slice_index: int,
+    time_index: int,
+    reference_label: str,
+) -> None:
     import matplotlib.pyplot as plt
 
     ref = reference[:, :, slice_index, time_index]
@@ -110,7 +125,7 @@ def save_png(reference: np.ndarray, prediction: np.ndarray, output_path: Path, s
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
     panels = [
-        ("H5 kSpace+dMap GT", ref, "gray", vmax),
+        (reference_label, ref, "gray", vmax),
         ("Repo recon", pred, "gray", vmax),
         ("Abs error", err, "magma", err_vmax),
     ]
@@ -126,14 +141,15 @@ def save_png(reference: np.ndarray, prediction: np.ndarray, output_path: Path, s
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--h5", type=Path, required=True, help="Source CINE H5 file.")
+    parser.add_argument("--h5", type=Path, help="Source CINE H5 file.")
+    parser.add_argument("--npy", type=Path, help="Existing normalized GT NPY file.")
     parser.add_argument("--recon", type=Path, required=True, help="Saved repo reconstruction MAT file.")
     parser.add_argument("--key", default="img4ranking", help="MAT key for the saved reconstruction.")
     parser.add_argument(
         "--gt-source",
-        choices=("kspace-dmap", "dimgc"),
+        choices=("kspace-dmap", "dimgc", "norm-npy"),
         default="kspace-dmap",
-        help="How to build the fully sampled reference from the H5 file.",
+        help="How to load or build the reference image.",
     )
     parser.add_argument(
         "--normalize-gt",
@@ -151,9 +167,20 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.gt_source == "kspace-dmap":
+        if args.h5 is None:
+            parser.error("--gt-source kspace-dmap requires --h5")
         gt = h5_gt_from_kspace_dmap(args.h5)
-    else:
+        gt_label = "H5 kSpace+dMap GT"
+    elif args.gt_source == "dimgc":
+        if args.h5 is None:
+            parser.error("--gt-source dimgc requires --h5")
         gt = h5_gt_from_dimgc(args.h5)
+        gt_label = "H5 dImgC GT"
+    else:
+        if args.npy is None:
+            parser.error("--gt-source norm-npy requires --npy")
+        gt = gt_from_norm_npy(args.npy)
+        gt_label = "Existing norm_img NPY GT"
     gt = normalize_by(gt, args.normalize_gt)
 
     recon = np.squeeze(read_mat_key(args.recon, args.key)).astype(np.float32)
@@ -172,7 +199,7 @@ def main() -> None:
     print("scale-fitted metrics:", metrics(gt, recon_scaled))
 
     if args.png:
-        save_png(gt, recon_scaled, args.png, args.slice, args.time)
+        save_png(gt, recon_scaled, args.png, args.slice, args.time, gt_label)
         print(f"wrote {args.png}")
 
 
