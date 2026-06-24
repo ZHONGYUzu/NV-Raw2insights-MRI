@@ -303,3 +303,38 @@ docs/daily-log-2026-06-23-smap-acc-acs.md
 - New acceleration rates can now be configured, but pretrained-model behavior may be unreliable for acceleration classes not seen during training.
 - If external smaps are used, verify their scaling, phase convention, and orientation carefully.
 - If raw masks are used without forced ACS, use `--skip-acs-check` during validation and `--disable-acs-region` during inference unless external smaps are definitely being passed and used.
+
+## 2026-06-24 Ground Truth Generation Note
+
+Added `scripts/generate_cine_h5_ground_truth.py` to generate ground truth directly from source CINE H5 files.
+
+The comparison-oriented default now writes MAT files, not NPY files, because the inference output is also MAT. This keeps manual comparison straightforward:
+
+```text
+GT:     dataset/GT_from_kspace_dMap/Sub0001.mat, key gt
+Recon:  output/<experiment>/val_img4ranking/Sub0001.mat, key img4ranking
+Shape:  (176, 132, 12, 25) = (frequency, phase, slice, time)
+Dtype:  float32 magnitude
+```
+
+The default GT source is `kSpace` + `dMap`:
+
+- `kSpace` is inverse-FFT'd into coil images.
+- `dMap` is used for sensitivity-map coil combination.
+- The combined complex image is converted to magnitude and transposed to match inference output orientation.
+
+Command for the first ten sorted H5 files:
+
+```bash
+mkdir -p dataset/GT_from_kspace_dMap
+
+for h5 in $(find /mnt/qdata/rawdata/CINE/2D_h5_compressed -maxdepth 1 -name '*.h5' | sort | head -n 10); do
+  base=$(basename "$h5" .h5)
+  python scripts/generate_cine_h5_ground_truth.py \
+    --input-h5-dir "$(dirname "$h5")" \
+    --output-dir dataset/GT_from_kspace_dMap \
+    --glob "${base}.h5"
+done
+```
+
+The script still supports the older NPY layout for existing evaluation scripts via `--format npy`, but the MAT output is the clearer format for comparing against current inference reconstructions.
