@@ -158,6 +158,32 @@ Ground truth root:  /home/students/studxuzho1/dataset_v0/norm_img
 Example ground truth: /home/students/studxuzho1/dataset_v0/norm_img/norm_img_Sub0001.npy
 ```
 
+#### New Custom CINE Naming Policy
+
+For new custom CINE runs, prefer short experiment roots and keep details in notes, metadata, script headers, or adjacent documentation instead of encoding every detail in path names.
+
+Use:
+
+```text
+dataset/cine1
+dataset/cine2
+dataset/cine3
+
+output/cine1
+output/cine2
+output/cine3
+```
+
+Document what each run means near the command or script that creates it. For the current acceleration comparison plan:
+
+| New run | Meaning | Dataset root | Output root |
+| --- | --- | --- | --- |
+| `cine1` | acc8 custom CINE experiment | `dataset/cine1` | `output/cine1` |
+| `cine2` | acc16 custom CINE experiment | `dataset/cine2` | `output/cine2` |
+| `cine3` | acc24 custom CINE experiment | `dataset/cine3` | `output/cine3` |
+
+Do not rename legacy folders until the new process has completed successfully and the old paths can be cleaned systematically.
+
 The converted custom dataset is already established at:
 
 ```text

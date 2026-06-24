@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate CINE ground-truth NPY files from source H5 files."""
+"""Generate CINE ground-truth files from source H5 files."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import scipy.io
 
 
 def ifft2c(kspace: np.ndarray) -> np.ndarray:
@@ -73,18 +74,32 @@ def save_npy_atomic(path: Path, array: np.ndarray) -> None:
         tmp_path.unlink(missing_ok=True)
 
 
+def save_mat_atomic(path: Path, values: dict[str, np.ndarray]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".mat", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        scipy.io.savemat(tmp_path, values, appendmat=False, do_compression=True)
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def convert_file(
     input_path: Path,
     output_dir: Path,
     source: str,
     normalize: str,
+    output_format: str,
+    mat_key: str,
     dimgc_key: str,
     kspace_key: str,
     dmap_key: str,
     prefix: str,
     overwrite: bool,
 ) -> Path:
-    output_path = output_dir / f"{prefix}{input_path.stem}.npy"
+    suffix = ".mat" if output_format == "mat" else ".npy"
+    output_path = output_dir / f"{prefix}{input_path.stem}{suffix}"
     if output_path.exists() and not overwrite:
         raise FileExistsError(f"Output exists: {output_path}; use --overwrite")
 
@@ -96,16 +111,22 @@ def convert_file(
         else:
             raise ValueError(f"Unknown source {source!r}")
 
-    gt = normalize_complex(gt, normalize).astype(np.complex64, copy=False)
-    gt = gt[..., None]  # (slice, time, phase, frequency, 1)
-    save_npy_atomic(output_path, gt)
+    gt = normalize_complex(gt, normalize)
+    if output_format == "mat":
+        gt_mat = np.abs(gt).astype(np.float32).transpose(3, 2, 0, 1)
+        save_mat_atomic(output_path, {mat_key: gt_mat})
+    elif output_format == "npy":
+        gt_npy = gt.astype(np.complex64, copy=False)[..., None]  # (slice, time, phase, frequency, 1)
+        save_npy_atomic(output_path, gt_npy)
+    else:
+        raise ValueError(f"Unknown output format {output_format!r}")
     return output_path
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-h5-dir", type=Path, required=True, help="Directory containing source CINE H5 files.")
-    parser.add_argument("--output-dir", type=Path, required=True, help="Directory for generated norm_img_<case>.npy files.")
+    parser.add_argument("--output-dir", type=Path, required=True, help="Directory for generated ground-truth files.")
     parser.add_argument("--glob", default="*.h5", help="Input filename glob (default: *.h5).")
     parser.add_argument(
         "--source",
@@ -118,10 +139,18 @@ def main() -> None:
         default="max",
         help="Complex image normalization before saving: none, max, or p99.5-style percentile (default: max).",
     )
+    parser.add_argument(
+        "--format",
+        choices=("mat", "npy"),
+        default="mat",
+        help="Output format. mat saves recon-comparison layout (frequency, phase, slice, time); "
+        "npy saves legacy GT layout (slice, time, phase, frequency, 1).",
+    )
+    parser.add_argument("--mat-key", default="gt", help="MAT key for --format mat output (default: gt).")
     parser.add_argument("--dimgc-key", default="dImgC")
     parser.add_argument("--kspace-key", default="kSpace")
     parser.add_argument("--dmap-key", default="dMap")
-    parser.add_argument("--prefix", default="norm_img_", help="Output filename prefix (default: norm_img_).")
+    parser.add_argument("--prefix", default="", help="Output filename prefix (default: empty, e.g. Sub0001.mat).")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -135,17 +164,19 @@ def main() -> None:
             output_dir=args.output_dir,
             source=args.source,
             normalize=args.normalize,
+            output_format=args.format,
+            mat_key=args.mat_key,
             dimgc_key=args.dimgc_key,
             kspace_key=args.kspace_key,
             dmap_key=args.dmap_key,
             prefix=args.prefix,
             overwrite=args.overwrite,
         )
-        saved = np.load(output_path, mmap_mode="r")
-        print(
-            f"{input_path.name} -> {output_path} "
-            f"shape={saved.shape} dtype={saved.dtype} abs_max={float(np.max(np.abs(saved))):.6g}"
-        )
+        if args.format == "mat":
+            saved = scipy.io.loadmat(output_path)[args.mat_key]
+        else:
+            saved = np.load(output_path, mmap_mode="r")
+        print(f"{input_path.name} -> {output_path} shape={saved.shape} dtype={saved.dtype}")
 
 
 if __name__ == "__main__":
