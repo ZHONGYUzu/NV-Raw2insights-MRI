@@ -456,7 +456,7 @@ for acc in 2 4 8 16; do
     --output-root dataset/CINE1acr${acc} \
     --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
     --mask-glob "mask_VISTA_132x25_acc${acc}_8.txt" \
-    --mask-type ktRadial${acc} \
+    --mask-type ktRadialVISTA${acc} \
     --case-glob 'Sub00*_kspace_full.mat' \
     --frequency-size 176 \
     --no-force-acs
@@ -464,6 +464,17 @@ done
 ```
 
 This keeps the VISTA mask center unmodified. Because the ACS center is not forced to one, later validation should use `--skip-acs-check`, and inference should use `--disable-acs-region`.
+
+The saved mask filename uses a repo/model-facing alias:
+
+```text
+Sub0001_mask_ktRadialVISTA2.mat
+Sub0001_mask_ktRadialVISTA4.mat
+Sub0001_mask_ktRadialVISTA8.mat
+Sub0001_mask_ktRadialVISTA16.mat
+```
+
+The actual mask values still come from the VISTA TXT files. The `ktRadialVISTA*` string is only a compatibility label so the model still maps the mask into its radial-like conditioning bucket while preserving the VISTA identity in the filename.
 
 ### Validate All Four Datasets
 
@@ -493,7 +504,7 @@ for acc in 2 4 8 16; do
     -c configs/nv_raw2insights_mri_base.json \
     -i dataset/CINE1acr${acc}/json_input \
     -o output/CINE1acr${acc}_debug \
-    --fixed-mask-types mask_ktRadial${acc} \
+    --fixed-mask-types mask_ktRadialVISTA${acc} \
     --accelerations ${acc} \
     --disable-acs-region \
     --debug \
@@ -518,7 +529,7 @@ for acc in 2 4 8 16; do
     -c configs/nv_raw2insights_mri_base.json \
     -i dataset/CINE1acr${acc}/json_input \
     -o output/CINE1acr${acc} \
-    --fixed-mask-types mask_ktRadial${acc} \
+    --fixed-mask-types mask_ktRadialVISTA${acc} \
     --accelerations ${acc} \
     --disable-acs-region \
     --profile-timing
@@ -577,3 +588,359 @@ done
 - R2 and R4 are exploratory unless validated or fine-tuned.
 - No-ACS-filled masks require `--disable-acs-region` unless the path is known to use external smaps correctly.
 - The current inference still applies the mask internally through `KspaceMaskd`; input k-space should remain fully sampled.
+
+### Inference Resume And Progress Behavior
+
+The inference script skips only complete case-level output files.
+
+Completed outputs are detected under:
+
+```text
+output/CINE1acr<acc>/val_img4ranking/SubXXXX.mat
+```
+
+If inference is interrupted in the middle of a case, that case is not resumed from the last forward pass. It is rerun from the beginning the next time. Already completed case MAT files in the same output folder are skipped.
+
+To resume the R16 run, for example:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CINE1acr16/json_input \
+  -o output/CINE1acr16 \
+  --fixed-mask-types mask_ktRadialVISTA16 \
+  --accelerations 16 \
+  --disable-acs-region \
+  --profile-timing
+```
+
+Current server run example observed:
+
+```text
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CINE1acr16/json_input \
+  -o output/CINE1acr16 \
+  --fixed-mask-types mask_ktRadialVISTA16 \
+  --accelerations 16 \
+  --disable-acs-region \
+  --profile-timing
+```
+
+The progress bar `0/10 ... 10/10` refers to the current acceleration dataset only. The input folder `dataset/CINE1acr16/json_input` containing 10 JSON files does not mean inference is complete; completion is determined by the 10 MAT files under `output/CINE1acr16/val_img4ranking`.
+
+Check completed output count:
+
+```bash
+find output/CINE1acr16/val_img4ranking -maxdepth 1 -name 'Sub*.mat' | wc -l
+```
+
+## 2026-06-24 Evaluation Workflow After Full Inference
+
+After all four full inference runs finish, expected prediction roots are:
+
+```text
+output/CINE1acr2/val_img4ranking
+output/CINE1acr4/val_img4ranking
+output/CINE1acr8/val_img4ranking
+output/CINE1acr16/val_img4ranking
+```
+
+Prediction MAT format:
+
+```text
+key: img4ranking
+shape: (176, 132, 12, 25)
+layout: (frequency, phase, slice, time)
+```
+
+Ground-truth MAT root:
+
+```text
+/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap
+```
+
+Ground-truth MAT format:
+
+```text
+key: gt
+shape: (176, 132, 12, 25)
+layout: (frequency, phase, slice, time)
+```
+
+### Evaluation Step 1: Shape And Finite Check
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import scipy.io
+import numpy as np
+
+gt_root = Path("/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap")
+
+for acc in (2, 4, 8, 16):
+    pred_root = Path(f"output/CINE1acr{acc}/val_img4ranking")
+    print(f"\n===== acc{acc} =====")
+    for pred_path in sorted(pred_root.glob("Sub*.mat")):
+        case = pred_path.stem
+        pred = scipy.io.loadmat(pred_path)["img4ranking"]
+        gt = scipy.io.loadmat(gt_root / f"{case}.mat")["gt"]
+        print(
+            case,
+            "pred", pred.shape, pred.dtype,
+            "gt", gt.shape, gt.dtype,
+            "finite", np.isfinite(pred).all(),
+            "match", pred.shape == gt.shape,
+        )
+PY
+```
+
+Expected result for every case:
+
+```text
+finite True
+match True
+```
+
+### Evaluation Step 2: Per-Acceleration Reconstruction Grids
+
+These images show each reconstruction independently.
+
+```bash
+for acc in 2 4 8 16; do
+  python scripts/visualize_mat.py \
+    output/CINE1acr${acc}/val_img4ranking \
+    -o output/CINE1acr${acc}/figs
+done
+```
+
+Output example:
+
+```text
+output/CINE1acr8/figs/Sub0001.png
+```
+
+Image format:
+
+```text
+one PNG per case per acceleration
+rows    = 12 slices
+columns = 25 time frames
+image   = reconstruction magnitude
+```
+
+This view is best for quickly checking blank frames, slice/time ordering, or severe artifacts within one acceleration setting.
+
+### Evaluation Step 3: MAT-To-MAT Quantitative Metrics
+
+The older checked-in evaluation scripts still mostly assume `norm_img_<case>.npy`, so this workflow uses a MAT-to-MAT inline evaluator for the current GT format.
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import csv
+import numpy as np
+import scipy.io
+
+gt_root = Path("/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap")
+out_dir = Path("output/CINE1_metrics_mat_gt")
+out_dir.mkdir(parents=True, exist_ok=True)
+
+rows = []
+summary = []
+
+for acc in (2, 4, 8, 16):
+    pred_root = Path(f"output/CINE1acr{acc}/val_img4ranking")
+    acc_rows = []
+
+    for pred_path in sorted(pred_root.glob("Sub*.mat")):
+        case = pred_path.stem
+        pred = scipy.io.loadmat(pred_path)["img4ranking"].astype(np.float32)
+        gt = scipy.io.loadmat(gt_root / f"{case}.mat")["gt"].astype(np.float32)
+
+        if pred.shape != gt.shape:
+            raise ValueError(f"{case} acc{acc}: pred {pred.shape} != gt {gt.shape}")
+
+        _, _, ns, nt = pred.shape
+        for s in range(ns):
+            for t in range(nt):
+                p = pred[:, :, s, t]
+                g = gt[:, :, s, t]
+                diff = p - g
+
+                mse = float(np.mean(diff ** 2))
+                mae = float(np.mean(np.abs(diff)))
+                denom = float(np.sum(g ** 2))
+                gt_norm = float(np.linalg.norm(g))
+                nmse = float(np.sum(diff ** 2) / denom) if denom > 0 else float("nan")
+                nrmse = float(np.sqrt(np.sum(diff ** 2)) / gt_norm) if gt_norm > 0 else float("nan")
+                data_range = float(g.max() - g.min())
+                psnr = float("nan") if mse <= 0 or data_range <= 0 else float(20 * np.log10(data_range / np.sqrt(mse)))
+
+                row = {
+                    "acceleration": f"acc{acc}",
+                    "case": case,
+                    "slice": s,
+                    "time": t,
+                    "psnr": psnr,
+                    "nrmse": nrmse,
+                    "nmse": nmse,
+                    "mse": mse,
+                    "mae": mae,
+                }
+                rows.append(row)
+                acc_rows.append(row)
+
+    for metric in ("psnr", "nrmse", "nmse", "mse", "mae"):
+        vals = np.array([r[metric] for r in acc_rows], dtype=np.float64)
+        vals = vals[np.isfinite(vals)]
+        summary.append({
+            "acceleration": f"acc{acc}",
+            "metric": metric,
+            "count": len(vals),
+            "mean": float(vals.mean()) if vals.size else float("nan"),
+            "std": float(vals.std()) if vals.size else float("nan"),
+            "median": float(np.median(vals)) if vals.size else float("nan"),
+            "q25": float(np.percentile(vals, 25)) if vals.size else float("nan"),
+            "q75": float(np.percentile(vals, 75)) if vals.size else float("nan"),
+        })
+
+with (out_dir / "frame_metrics.csv").open("w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+
+with (out_dir / "summary_metrics.csv").open("w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=list(summary[0].keys()))
+    writer.writeheader()
+    writer.writerows(summary)
+
+print("Saved", out_dir / "frame_metrics.csv")
+print("Saved", out_dir / "summary_metrics.csv")
+print("Total frame rows:", len(rows))
+PY
+```
+
+Expected metric count:
+
+```text
+10 cases x 12 slices x 25 frames x 4 accelerations = 12000 frame rows
+```
+
+Metric outputs:
+
+```text
+output/CINE1_metrics_mat_gt/frame_metrics.csv
+output/CINE1_metrics_mat_gt/summary_metrics.csv
+```
+
+CSV formats:
+
+```text
+frame_metrics.csv:
+acceleration, case, slice, time, psnr, nrmse, nmse, mse, mae
+
+summary_metrics.csv:
+acceleration, metric, count, mean, std, median, q25, q75
+```
+
+### Evaluation Step 4: Cross-Acceleration Visual Comparison
+
+This makes one comparison PNG per case at one selected slice/time.
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import numpy as np
+import scipy.io
+import matplotlib.pyplot as plt
+
+gt_root = Path("/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap")
+out_dir = Path("output/CINE1_acc_comparison_mat_gt")
+out_dir.mkdir(parents=True, exist_ok=True)
+
+cases = [f"Sub{i:04d}" for i in range(1, 11)]
+accs = [2, 4, 8, 16]
+slice_idx = 6
+time_idx = 12
+
+for case in cases:
+    gt = scipy.io.loadmat(gt_root / f"{case}.mat")["gt"].astype(np.float32)
+    gt_frame = gt[:, :, slice_idx, time_idx]
+    vmax = np.percentile(gt_frame, 99.5)
+
+    fig, axes = plt.subplots(3, len(accs) + 1, figsize=(4 * (len(accs) + 1), 10))
+
+    axes[0, 0].imshow(gt_frame.T, cmap="gray", origin="lower", vmax=vmax)
+    axes[0, 0].set_title("GT")
+    axes[0, 0].axis("off")
+    axes[1, 0].axis("off")
+    axes[2, 0].axis("off")
+
+    for j, acc in enumerate(accs, start=1):
+        pred = scipy.io.loadmat(f"output/CINE1acr{acc}/val_img4ranking/{case}.mat")["img4ranking"].astype(np.float32)
+        pred_frame = pred[:, :, slice_idx, time_idx]
+        err = np.abs(pred_frame - gt_frame)
+
+        axes[0, j].imshow(pred_frame.T, cmap="gray", origin="lower", vmax=vmax)
+        axes[0, j].set_title(f"acc{acc} recon")
+        axes[0, j].axis("off")
+
+        axes[1, j].imshow(err.T, cmap="magma", origin="lower")
+        axes[1, j].set_title(f"acc{acc} abs error")
+        axes[1, j].axis("off")
+
+        axes[2, j].imshow((pred_frame - gt_frame).T, cmap="bwr", origin="lower")
+        axes[2, j].set_title(f"acc{acc} signed diff")
+        axes[2, j].axis("off")
+
+    fig.suptitle(f"{case} slice={slice_idx} time={time_idx}")
+    fig.tight_layout()
+    path = out_dir / f"{case}_slice{slice_idx:02d}_time{time_idx:02d}.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(path)
+PY
+```
+
+Output examples:
+
+```text
+output/CINE1_acc_comparison_mat_gt/Sub0001_slice06_time12.png
+...
+output/CINE1_acc_comparison_mat_gt/Sub0010_slice06_time12.png
+```
+
+Image format:
+
+```text
+columns: GT | acc2 | acc4 | acc8 | acc16
+row 1:   GT image and reconstruction images
+row 2:   absolute error maps
+row 3:   signed difference maps
+```
+
+This is the preferred visual format for comparing acceleration settings on the same slice/time frame.
+
+### Evaluation Review Order
+
+Recommended inspection order:
+
+```text
+1. Shape/finite check output
+2. output/CINE1acr*/figs/Sub0001.png
+3. output/CINE1_acc_comparison_mat_gt/Sub0001_slice06_time12.png
+4. output/CINE1_metrics_mat_gt/summary_metrics.csv
+5. output/CINE1_metrics_mat_gt/frame_metrics.csv for detailed outliers
+```
+
+Expected qualitative trend if the model behaves normally:
+
+```text
+acc2  should usually look best or close to best
+acc4  should be good
+acc8  should be familiar/default-ish
+acc16 may show more artifacts
+```
+
+R2 and R4 remain exploratory because they are outside the original confirmed pretrained setup.
