@@ -338,3 +338,242 @@ done
 ```
 
 The script still supports the older NPY layout for existing evaluation scripts via `--format npy`, but the MAT output is the clearer format for comparing against current inference reconstructions.
+
+## 2026-06-24 CINE1 Ten-Case Multi-Acceleration Plan
+
+Updated the planned server workflow for a 10-case experiment using four mask accelerations:
+
+```text
+R = 2, 4, 8, 16
+```
+
+Naming decisions:
+
+```text
+Shared base dataset: dataset/CINE1
+
+Acceleration datasets:
+dataset/CINE1acr2
+dataset/CINE1acr4
+dataset/CINE1acr8
+dataset/CINE1acr16
+
+Inference outputs:
+output/CINE1acr2
+output/CINE1acr4
+output/CINE1acr8
+output/CINE1acr16
+```
+
+Ground-truth root:
+
+```text
+/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap
+```
+
+### Generate MAT Ground Truth
+
+Skip this step if GT already exists at the path above.
+
+```bash
+python scripts/generate_cine_h5_ground_truth.py \
+  --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
+  --output-dir /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap \
+  --glob 'Sub000[1-9].h5' \
+  --source kspace-dmap \
+  --format mat \
+  --mat-key gt \
+  --normalize max
+
+python scripts/generate_cine_h5_ground_truth.py \
+  --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
+  --output-dir /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap \
+  --glob 'Sub0010.h5' \
+  --source kspace-dmap \
+  --format mat \
+  --mat-key gt \
+  --normalize max
+```
+
+Expected GT files:
+
+```text
+Sub0001.mat
+...
+Sub0010.mat
+```
+
+Each GT MAT contains:
+
+```text
+key: gt
+shape: (176, 132, 12, 25)
+layout: (frequency, phase, slice, time)
+```
+
+### Convert Shared K-Space And Smap Dataset
+
+Convert full k-space and external H5 `dMap` smaps once into `dataset/CINE1`.
+
+```bash
+python scripts/convert_cine_h5_kspace_to_mat.py \
+  --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
+  --output-root dataset/CINE1 \
+  --glob 'Sub000[1-9].h5' \
+  --smap-key dMap
+
+python scripts/convert_cine_h5_kspace_to_mat.py \
+  --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
+  --output-root dataset/CINE1 \
+  --glob 'Sub0010.h5' \
+  --smap-key dMap
+```
+
+Expected JSON descriptors under:
+
+```text
+dataset/CINE1/json_input
+```
+
+Each JSON should contain both:
+
+```json
+{
+  "kspace": ".../Sub0001_kspace_full.mat",
+  "sensitivity_maps": ".../Sub0001_sensitivity_maps.mat",
+  "mask": []
+}
+```
+
+### Create R2/R4/R8/R16 Datasets Without ACS Filling
+
+The masks should be converted without forcing central ACS lines:
+
+```bash
+for acc in 2 4 8 16; do
+  python scripts/create_custom_cine_acc_dataset.py \
+    --source-root dataset/CINE1 \
+    --output-root dataset/CINE1acr${acc} \
+    --input-mask-dir /home/students/studxusiy1/mr_recon/masks \
+    --mask-glob "mask_VISTA_132x25_acc${acc}_8.txt" \
+    --mask-type ktRadial${acc} \
+    --case-glob 'Sub00*_kspace_full.mat' \
+    --frequency-size 176 \
+    --no-force-acs
+done
+```
+
+This keeps the VISTA mask center unmodified. Because the ACS center is not forced to one, later validation should use `--skip-acs-check`, and inference should use `--disable-acs-region`.
+
+### Validate All Four Datasets
+
+```bash
+for acc in 2 4 8 16; do
+  python scripts/validate_cine_inference_data.py \
+    dataset/CINE1acr${acc}/json_input \
+    --skip-acs-check
+done
+```
+
+Expected pattern:
+
+```text
+OK: Sub0001.json: k-space (25, 12, 15, 132, 176), masks 1, smap yes
+...
+Validated 10 case(s).
+```
+
+### Debug Inference
+
+Run one case per acceleration first:
+
+```bash
+for acc in 2 4 8 16; do
+  python scripts/inference.py \
+    -c configs/nv_raw2insights_mri_base.json \
+    -i dataset/CINE1acr${acc}/json_input \
+    -o output/CINE1acr${acc}_debug \
+    --fixed-mask-types mask_ktRadial${acc} \
+    --accelerations ${acc} \
+    --disable-acs-region \
+    --debug \
+    --profile-timing
+done
+```
+
+Expected debug output per acceleration:
+
+```text
+output/CINE1acr2_debug/val_img4ranking/Sub0001.mat
+output/CINE1acr4_debug/val_img4ranking/Sub0001.mat
+output/CINE1acr8_debug/val_img4ranking/Sub0001.mat
+output/CINE1acr16_debug/val_img4ranking/Sub0001.mat
+```
+
+### Full Inference
+
+```bash
+for acc in 2 4 8 16; do
+  python scripts/inference.py \
+    -c configs/nv_raw2insights_mri_base.json \
+    -i dataset/CINE1acr${acc}/json_input \
+    -o output/CINE1acr${acc} \
+    --fixed-mask-types mask_ktRadial${acc} \
+    --accelerations ${acc} \
+    --disable-acs-region \
+    --profile-timing
+done
+```
+
+Expected output folders:
+
+```text
+output/CINE1acr2/val_img4ranking
+output/CINE1acr4/val_img4ranking
+output/CINE1acr8/val_img4ranking
+output/CINE1acr16/val_img4ranking
+```
+
+Each output MAT should contain:
+
+```text
+key: img4ranking
+shape: (176, 132, 12, 25)
+```
+
+### Quick MAT-To-MAT Shape Check
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import scipy.io
+
+gt_root = Path("/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap")
+
+for acc in (2, 4, 8, 16):
+    pred_root = Path(f"output/CINE1acr{acc}/val_img4ranking")
+    print(f"\nacc{acc}")
+    for pred_path in sorted(pred_root.glob("Sub*.mat")):
+        case = pred_path.stem
+        pred = scipy.io.loadmat(pred_path)["img4ranking"]
+        gt = scipy.io.loadmat(gt_root / f"{case}.mat")["gt"]
+        print(case, pred.shape, gt.shape, pred.dtype, gt.dtype, pred.shape == gt.shape)
+PY
+```
+
+### Visualize Outputs
+
+```bash
+for acc in 2 4 8 16; do
+  python scripts/visualize_mat.py \
+    output/CINE1acr${acc}/val_img4ranking \
+    -o output/CINE1acr${acc}/figs
+done
+```
+
+### Experimental Cautions
+
+- R8 and R16 are closer to the pretrained model's default configured rates.
+- R2 and R4 are exploratory unless validated or fine-tuned.
+- No-ACS-filled masks require `--disable-acs-region` unless the path is known to use external smaps correctly.
+- The current inference still applies the mask internally through `KspaceMaskd`; input k-space should remain fully sampled.
