@@ -106,6 +106,25 @@ def load_prediction(path: Path, key: str) -> np.ndarray:
     return np.abs(pred)
 
 
+def load_ground_truth(gt_root: Path, case_id: str, gt_key: str) -> np.ndarray:
+    mat_path = gt_root / f"{case_id}.mat"
+    if mat_path.is_file():
+        gt = np.asarray(read_mat_key(mat_path, gt_key)).squeeze().astype(np.float32)
+        if gt.ndim != 4:
+            raise ValueError(f"{mat_path}: expected 4D GT array at key {gt_key!r}, got shape {gt.shape}")
+        if not np.isfinite(gt).all():
+            raise ValueError(f"{mat_path}: GT contains NaN or Inf")
+        return np.abs(gt)
+
+    npy_path = gt_root / f"norm_img_{case_id}.npy"
+    if npy_path.is_file():
+        return load_gt(npy_path)
+
+    raise FileNotFoundError(
+        f"{case_id}: missing ground truth. Expected {mat_path} or {npy_path}"
+    )
+
+
 def apply_original_crop(image: np.ndarray, filetype: str) -> np.ndarray:
     if image.ndim != 4:
         raise ValueError(f"Expected 4D image before crop, got {image.shape}")
@@ -326,6 +345,7 @@ def process_case(
     gt_root: Path,
     output_dir: Path,
     key: str,
+    gt_key: str,
     mode: str,
     filetype: str,
     percentile: float,
@@ -336,10 +356,7 @@ def process_case(
     make_gif: bool,
     fps: float,
 ) -> List[Path]:
-    gt_path = gt_root / f"norm_img_{case_id}.npy"
-    if not gt_path.is_file():
-        raise FileNotFoundError(f"{case_id}: missing ground truth {gt_path}")
-    gt_full = load_gt(gt_path)
+    gt_full = load_ground_truth(gt_root, case_id, gt_key)
 
     arrays_by_label: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     for label, pred_dir in acc_inputs:
@@ -400,7 +417,7 @@ def main() -> None:
         "--gt-root",
         type=Path,
         default=Path("/home/students/studxuzho1/dataset_v0/norm_img"),
-        help="Directory containing norm_img_<case>.npy ground truth files.",
+        help="Directory containing <case>.mat GT files or norm_img_<case>.npy ground truth files.",
     )
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("output/cine_qualitative"))
     parser.add_argument("--case", action="append", dest="cases", help="Case id to process, for example Sub0001.")
@@ -414,6 +431,7 @@ def main() -> None:
         help="Output mode. Repeat to create both. Default: full.",
     )
     parser.add_argument("--key", default="img4ranking", help="MAT key containing the reconstruction.")
+    parser.add_argument("--gt-key", default="gt", help="MAT key containing the ground truth when using MAT GT.")
     parser.add_argument("--filetype", default="cine", help="File type passed to old run4Ranking crop logic.")
     parser.add_argument("--percentile", type=float, default=99.5, help="Display percentile for input/recon/GT.")
     parser.add_argument("--error-percentile", type=float, default=99.0, help="Display percentile for error.")
@@ -449,6 +467,7 @@ def main() -> None:
                 gt_root=args.gt_root,
                 output_dir=args.output_dir,
                 key=args.key,
+                gt_key=args.gt_key,
                 mode=mode,
                 filetype=args.filetype,
                 percentile=args.percentile,
