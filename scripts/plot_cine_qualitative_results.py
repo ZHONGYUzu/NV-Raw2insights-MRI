@@ -120,8 +120,20 @@ def load_ground_truth(gt_root: Path, case_id: str, gt_key: str) -> np.ndarray:
     if npy_path.is_file():
         return load_gt(npy_path)
 
+    h5_path = gt_root / f"{case_id}.h5"
+    if h5_path.is_file():
+        if h5py is None:
+            raise ImportError("h5py is required to load dImgC ground truth from H5 files")
+        with h5py.File(h5_path, "r") as h5_file:
+            if gt_key not in h5_file:
+                raise KeyError(f"{h5_path}: missing H5 key {gt_key!r}; keys={list(h5_file.keys())}")
+            dimgc = np.asarray(h5_file[gt_key])
+        if dimgc.ndim != 5 or dimgc.shape[1] != 1:
+            raise ValueError(f"{h5_path}:{gt_key} expected shape (slice, 1, time, phase, frequency), got {dimgc.shape}")
+        return np.abs(dimgc[:, 0]).astype(np.float32).transpose(3, 2, 0, 1)
+
     raise FileNotFoundError(
-        f"{case_id}: missing ground truth. Expected {mat_path} or {npy_path}"
+        f"{case_id}: missing ground truth. Expected {mat_path}, {npy_path}, or {h5_path}"
     )
 
 
@@ -469,7 +481,7 @@ def main() -> None:
         "--gt-root",
         type=Path,
         default=Path("/home/students/studxuzho1/dataset_v0/norm_img"),
-        help="Directory containing <case>.mat GT files or norm_img_<case>.npy ground truth files.",
+        help="Directory containing <case>.mat, norm_img_<case>.npy, or <case>.h5 ground truth files.",
     )
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("output/cine_qualitative"))
     parser.add_argument("--case", action="append", dest="cases", help="Case id to process, for example Sub0001.")
@@ -483,7 +495,7 @@ def main() -> None:
         help="Output mode. Repeat to create both. Default: full.",
     )
     parser.add_argument("--key", default="img4ranking", help="MAT key containing the reconstruction.")
-    parser.add_argument("--gt-key", default="gt", help="MAT key containing the ground truth when using MAT GT.")
+    parser.add_argument("--gt-key", default="gt", help="GT key for MAT or H5 files. Use dImgC for source H5 GT.")
     parser.add_argument("--filetype", default="cine", help="File type passed to old run4Ranking crop logic.")
     parser.add_argument("--percentile", type=float, default=99.5, help="Display percentile for input/recon/GT.")
     parser.add_argument("--error-percentile", type=float, default=99.0, help="Display percentile for error.")
