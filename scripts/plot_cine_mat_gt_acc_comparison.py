@@ -97,7 +97,7 @@ def save_case_grid(
     gt_key: str,
     percentile: float,
     error_percentile: float,
-    diff_percentile: float,
+    zoom_error_percentile: float,
     slice_index: Optional[int],
     time_index: Optional[int],
 ) -> Path:
@@ -114,7 +114,6 @@ def save_case_grid(
 
     pred_frames = []
     error_frames = []
-    diff_frames = []
     titles = []
     for label, pred_dir in acc_inputs:
         pred_path = pred_dir / f"{case_id}.mat"
@@ -129,7 +128,6 @@ def save_case_grid(
         psnr, nrmse = frame_metrics(pred_frame, gt_frame)
         pred_frames.append(pred_frame)
         error_frames.append(error_frame)
-        diff_frames.append(diff_frame)
         titles.append(f"{label}\nPSNR {psnr:.2f} dB | NRMSE {nrmse:.4f}")
 
     image_vmax = np.percentile(np.stack([gt_frame, *pred_frames]), percentile)
@@ -138,9 +136,9 @@ def save_case_grid(
     error_vmax = np.percentile(np.stack(error_frames), error_percentile)
     if not np.isfinite(error_vmax) or error_vmax <= 0:
         error_vmax = None
-    diff_limit = np.percentile(np.abs(np.stack(diff_frames)), diff_percentile)
-    if not np.isfinite(diff_limit) or diff_limit <= 0:
-        diff_limit = None
+    zoom_error_vmax = np.percentile(np.stack(error_frames), zoom_error_percentile)
+    if not np.isfinite(zoom_error_vmax) or zoom_error_vmax <= 0:
+        zoom_error_vmax = error_vmax
 
     num_cols = len(acc_inputs) + 1
     fig, axes = plt.subplots(3, num_cols, figsize=(4.0 * num_cols, 10.0), squeeze=False)
@@ -151,14 +149,14 @@ def save_case_grid(
     for row in (1, 2):
         axes[row, 0].axis("off")
 
-    for col, (title, pred_frame, error_frame, diff_frame) in enumerate(
-        zip(titles, pred_frames, error_frames, diff_frames),
+    for col, (title, pred_frame, error_frame) in enumerate(
+        zip(titles, pred_frames, error_frames),
         start=1,
     ):
         panels = [
             (0, pred_frame, "gray", None, image_vmax, title),
             (1, error_frame, "magma", None, error_vmax, "Abs error"),
-            (2, diff_frame, "bwr", -diff_limit if diff_limit is not None else None, diff_limit, "Signed diff"),
+            (2, error_frame, "magma", None, zoom_error_vmax, "Abs error zoom"),
         ]
         for row, image, cmap, vmin, vmax, title_text in panels:
             axis = axes[row, col]
@@ -205,7 +203,12 @@ def main() -> None:
     parser.add_argument("--gt-key", default="gt", help="MAT key containing the ground truth.")
     parser.add_argument("--percentile", type=float, default=99.5, help="Display percentile for GT/recon panels.")
     parser.add_argument("--error-percentile", type=float, default=99.0, help="Display percentile for absolute error.")
-    parser.add_argument("--diff-percentile", type=float, default=99.0, help="Symmetric percentile for signed diff.")
+    parser.add_argument(
+        "--zoom-error-percentile",
+        type=float,
+        default=95.0,
+        help="Display percentile for the third-row high-contrast absolute error map.",
+    )
     parser.add_argument("--slice-index", type=int, default=None, help="Slice to visualize; default is center slice.")
     parser.add_argument("--time-index", type=int, default=None, help="Time frame to visualize; default is center frame.")
     args = parser.parse_args()
@@ -232,7 +235,7 @@ def main() -> None:
             gt_key=args.gt_key,
             percentile=args.percentile,
             error_percentile=args.error_percentile,
-            diff_percentile=args.diff_percentile,
+            zoom_error_percentile=args.zoom_error_percentile,
             slice_index=args.slice_index,
             time_index=args.time_index,
         )

@@ -814,7 +814,7 @@ Image format:
 columns: GT | acc2 | acc4 | acc8 | acc16
 row 1:   GT image and reconstruction images
 row 2:   absolute error maps
-row 3:   signed difference maps
+row 3:   high-contrast absolute error maps, not signed difference
 ```
 
 This is the preferred visual format for comparing acceleration settings on the same slice/time frame.
