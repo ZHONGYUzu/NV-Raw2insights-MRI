@@ -702,6 +702,20 @@ finite True
 match True
 ```
 
+Observed server result:
+
+```text
+acc2:  Sub0001-Sub0010 all pred (176, 132, 12, 25) float32; gt (176, 132, 12, 25) float32; finite True; match True
+acc4:  Sub0001-Sub0010 all pred (176, 132, 12, 25) float32; gt (176, 132, 12, 25) float32; finite True; match True
+acc8:  Sub0001-Sub0010 all pred (176, 132, 12, 25) float32; gt (176, 132, 12, 25) float32; finite True; match True
+acc16: Sub0001-Sub0009 observed all pred (176, 132, 12, 25) float32; gt (176, 132, 12, 25) float32; finite True; match True
+```
+
+Note:
+
+- The pasted terminal output for acc16 shows Sub0001 through Sub0009. If Sub0010 was also checked afterward, record it as matching too.
+- This confirms the MAT-to-MAT orientation is correct for the completed/observed outputs.
+
 ### Evaluation Step 2: Per-Acceleration Reconstruction Grids
 
 These images show each reconstruction independently.
@@ -733,92 +747,16 @@ This view is best for quickly checking blank frames, slice/time ordering, or sev
 
 ### Evaluation Step 3: MAT-To-MAT Quantitative Metrics
 
-The older checked-in evaluation scripts still mostly assume `norm_img_<case>.npy`, so this workflow uses a MAT-to-MAT inline evaluator for the current GT format.
+Use the MAT-to-MAT evaluator for the current GT format. It reads prediction key `img4ranking` and GT key `gt`; both arrays are expected to be full-size `(frequency, phase, slice, time)`.
 
 ```bash
-python - <<'PY'
-from pathlib import Path
-import csv
-import numpy as np
-import scipy.io
-
-gt_root = Path("/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap")
-out_dir = Path("output/CINE1_metrics_mat_gt")
-out_dir.mkdir(parents=True, exist_ok=True)
-
-rows = []
-summary = []
-
-for acc in (2, 4, 8, 16):
-    pred_root = Path(f"output/CINE1acr{acc}/val_img4ranking")
-    acc_rows = []
-
-    for pred_path in sorted(pred_root.glob("Sub*.mat")):
-        case = pred_path.stem
-        pred = scipy.io.loadmat(pred_path)["img4ranking"].astype(np.float32)
-        gt = scipy.io.loadmat(gt_root / f"{case}.mat")["gt"].astype(np.float32)
-
-        if pred.shape != gt.shape:
-            raise ValueError(f"{case} acc{acc}: pred {pred.shape} != gt {gt.shape}")
-
-        _, _, ns, nt = pred.shape
-        for s in range(ns):
-            for t in range(nt):
-                p = pred[:, :, s, t]
-                g = gt[:, :, s, t]
-                diff = p - g
-
-                mse = float(np.mean(diff ** 2))
-                mae = float(np.mean(np.abs(diff)))
-                denom = float(np.sum(g ** 2))
-                gt_norm = float(np.linalg.norm(g))
-                nmse = float(np.sum(diff ** 2) / denom) if denom > 0 else float("nan")
-                nrmse = float(np.sqrt(np.sum(diff ** 2)) / gt_norm) if gt_norm > 0 else float("nan")
-                data_range = float(g.max() - g.min())
-                psnr = float("nan") if mse <= 0 or data_range <= 0 else float(20 * np.log10(data_range / np.sqrt(mse)))
-
-                row = {
-                    "acceleration": f"acc{acc}",
-                    "case": case,
-                    "slice": s,
-                    "time": t,
-                    "psnr": psnr,
-                    "nrmse": nrmse,
-                    "nmse": nmse,
-                    "mse": mse,
-                    "mae": mae,
-                }
-                rows.append(row)
-                acc_rows.append(row)
-
-    for metric in ("psnr", "nrmse", "nmse", "mse", "mae"):
-        vals = np.array([r[metric] for r in acc_rows], dtype=np.float64)
-        vals = vals[np.isfinite(vals)]
-        summary.append({
-            "acceleration": f"acc{acc}",
-            "metric": metric,
-            "count": len(vals),
-            "mean": float(vals.mean()) if vals.size else float("nan"),
-            "std": float(vals.std()) if vals.size else float("nan"),
-            "median": float(np.median(vals)) if vals.size else float("nan"),
-            "q25": float(np.percentile(vals, 25)) if vals.size else float("nan"),
-            "q75": float(np.percentile(vals, 75)) if vals.size else float("nan"),
-        })
-
-with (out_dir / "frame_metrics.csv").open("w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-    writer.writeheader()
-    writer.writerows(rows)
-
-with (out_dir / "summary_metrics.csv").open("w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=list(summary[0].keys()))
-    writer.writeheader()
-    writer.writerows(summary)
-
-print("Saved", out_dir / "frame_metrics.csv")
-print("Saved", out_dir / "summary_metrics.csv")
-print("Total frame rows:", len(rows))
-PY
+python scripts/evaluate_cine_mat_gt_metrics.py \
+  --acc acc2=output/CINE1acr2/val_img4ranking \
+  --acc acc4=output/CINE1acr4/val_img4ranking \
+  --acc acc8=output/CINE1acr8/val_img4ranking \
+  --acc acc16=output/CINE1acr16/val_img4ranking \
+  --gt-root /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap \
+  -o output/CINE1_metrics_mat_gt
 ```
 
 Expected metric count:
@@ -832,75 +770,34 @@ Metric outputs:
 ```text
 output/CINE1_metrics_mat_gt/frame_metrics.csv
 output/CINE1_metrics_mat_gt/summary_metrics.csv
+output/CINE1_metrics_mat_gt/metrics_boxplot.png
+output/CINE1_metrics_mat_gt/metrics_violin.png
 ```
 
 CSV formats:
 
 ```text
 frame_metrics.csv:
-acceleration, case, slice, time, psnr, nrmse, nmse, mse, mae
+acceleration, case, slice, time, shape, psnr, nrmse, nmse, mse, mae
 
 summary_metrics.csv:
-acceleration, metric, count, mean, std, median, q25, q75
+acceleration, num_frames, num_cases, psnr_mean, psnr_std, ...
 ```
 
 ### Evaluation Step 4: Cross-Acceleration Visual Comparison
 
-This makes one comparison PNG per case at one selected slice/time.
+This makes one comparison PNG per case at one selected slice/time using the MAT GT files.
 
 ```bash
-python - <<'PY'
-from pathlib import Path
-import numpy as np
-import scipy.io
-import matplotlib.pyplot as plt
-
-gt_root = Path("/home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap")
-out_dir = Path("output/CINE1_acc_comparison_mat_gt")
-out_dir.mkdir(parents=True, exist_ok=True)
-
-cases = [f"Sub{i:04d}" for i in range(1, 11)]
-accs = [2, 4, 8, 16]
-slice_idx = 6
-time_idx = 12
-
-for case in cases:
-    gt = scipy.io.loadmat(gt_root / f"{case}.mat")["gt"].astype(np.float32)
-    gt_frame = gt[:, :, slice_idx, time_idx]
-    vmax = np.percentile(gt_frame, 99.5)
-
-    fig, axes = plt.subplots(3, len(accs) + 1, figsize=(4 * (len(accs) + 1), 10))
-
-    axes[0, 0].imshow(gt_frame.T, cmap="gray", origin="lower", vmax=vmax)
-    axes[0, 0].set_title("GT")
-    axes[0, 0].axis("off")
-    axes[1, 0].axis("off")
-    axes[2, 0].axis("off")
-
-    for j, acc in enumerate(accs, start=1):
-        pred = scipy.io.loadmat(f"output/CINE1acr{acc}/val_img4ranking/{case}.mat")["img4ranking"].astype(np.float32)
-        pred_frame = pred[:, :, slice_idx, time_idx]
-        err = np.abs(pred_frame - gt_frame)
-
-        axes[0, j].imshow(pred_frame.T, cmap="gray", origin="lower", vmax=vmax)
-        axes[0, j].set_title(f"acc{acc} recon")
-        axes[0, j].axis("off")
-
-        axes[1, j].imshow(err.T, cmap="magma", origin="lower")
-        axes[1, j].set_title(f"acc{acc} abs error")
-        axes[1, j].axis("off")
-
-        axes[2, j].imshow((pred_frame - gt_frame).T, cmap="bwr", origin="lower")
-        axes[2, j].set_title(f"acc{acc} signed diff")
-        axes[2, j].axis("off")
-
-    fig.suptitle(f"{case} slice={slice_idx} time={time_idx}")
-    fig.tight_layout()
-    path = out_dir / f"{case}_slice{slice_idx:02d}_time{time_idx:02d}.png"
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(path)
-PY
+python scripts/plot_cine_mat_gt_acc_comparison.py \
+  --acc acc2=output/CINE1acr2/val_img4ranking \
+  --acc acc4=output/CINE1acr4/val_img4ranking \
+  --acc acc8=output/CINE1acr8/val_img4ranking \
+  --acc acc16=output/CINE1acr16/val_img4ranking \
+  --gt-root /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap \
+  -o output/CINE1_acc_comparison_mat_gt \
+  --slice-index 6 \
+  --time-index 12
 ```
 
 Output examples:
@@ -932,6 +829,7 @@ Recommended inspection order:
 3. output/CINE1_acc_comparison_mat_gt/Sub0001_slice06_time12.png
 4. output/CINE1_metrics_mat_gt/summary_metrics.csv
 5. output/CINE1_metrics_mat_gt/frame_metrics.csv for detailed outliers
+6. output/CINE1_gifs/acc*/Sub*_gt_recon_error.gif for temporal behavior
 ```
 
 Expected qualitative trend if the model behaves normally:
@@ -944,3 +842,97 @@ acc16 may show more artifacts
 ```
 
 R2 and R4 remain exploratory because they are outside the original confirmed pretrained setup.
+
+### Evaluation Step 5: Per-Case GIFs For Each Acceleration
+
+Added `scripts/make_cine_acc_gifs.py`.
+
+Purpose:
+
+- Generate animated CINE GIFs after quantitative metrics and cross-acceleration PNG comparisons.
+- Produce one GIF per case per acceleration.
+- Animate all time frames for one selected slice only.
+- For the current review, use the sixth slice for every case. In script arguments, prefer `--slice-number 6` because it is one-based and directly means the sixth slice.
+- If GT is provided, each GIF frame is a three-panel comparison:
+
+```text
+GT | Recon | Abs error
+```
+
+Default output root:
+
+```text
+output/CINE1_gifs
+```
+
+Recommended command for the current CINE1 experiment:
+
+```bash
+python scripts/make_cine_acc_gifs.py \
+  --acc acc2=output/CINE1acr2/val_img4ranking \
+  --acc acc4=output/CINE1acr4/val_img4ranking \
+  --acc acc8=output/CINE1acr8/val_img4ranking \
+  --acc acc16=output/CINE1acr16/val_img4ranking \
+  --gt-root /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap \
+  -o output/CINE1_gifs \
+  --slice-number 6 \
+  --fps 5
+```
+
+Expected output layout:
+
+```text
+output/CINE1_gifs/
+  acc2/
+    Sub0001_acc2_slice06_gt_recon_error.gif
+    ...
+    Sub0010_acc2_slice06_gt_recon_error.gif
+  acc4/
+    Sub0001_acc4_slice06_gt_recon_error.gif
+    ...
+  acc8/
+    ...
+  acc16/
+    ...
+```
+
+Each GIF:
+
+```text
+case: one subject, e.g. Sub0001
+acceleration: one setting, e.g. acc8
+slice: sixth slice, which is one-based slice number 6 and zero-based index 5
+frames: 25 cardiac time frames
+panels per frame: GT | Recon | Abs error
+```
+
+For a quick smoke test before generating all GIFs:
+
+```bash
+python scripts/make_cine_acc_gifs.py \
+  --acc acc2=output/CINE1acr2/val_img4ranking \
+  --acc acc4=output/CINE1acr4/val_img4ranking \
+  --acc acc8=output/CINE1acr8/val_img4ranking \
+  --acc acc16=output/CINE1acr16/val_img4ranking \
+  --gt-root /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/GT_from_kspace_dMap \
+  -o output/CINE1_gifs_smoke \
+  --slice-number 6 \
+  --fps 5 \
+  --max-cases 1
+```
+
+If GT panels are not needed and only reconstruction GIFs are desired, omit `--gt-root`:
+
+```bash
+python scripts/make_cine_acc_gifs.py \
+  --acc acc8=output/CINE1acr8/val_img4ranking \
+  -o output/CINE1_gifs_recon_only \
+  --slice-number 6
+```
+
+GIF interpretation:
+
+- The `GT` panel is the MAT ground truth from `dataset/GT_from_kspace_dMap`, key `gt`.
+- The `Recon` panel is the model output from `val_img4ranking`, key `img4ranking`.
+- The `Abs error` panel is `abs(recon - gt)` for the same frame.
+- All panels use the current orientation used in comparison PNGs.
