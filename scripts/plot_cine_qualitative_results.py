@@ -180,6 +180,18 @@ def image_limits(images: Sequence[np.ndarray], percentile: float) -> Optional[fl
     return float(vmax) if np.isfinite(vmax) and vmax > 0 else None
 
 
+def normalized_abs_error(output_frame: np.ndarray, target_frame: np.ndarray) -> np.ndarray:
+    output_abs = np.abs(output_frame)
+    target_abs = np.abs(target_frame)
+    output_max = np.max(output_abs)
+    target_max = np.max(target_abs)
+    if output_max > 0:
+        output_abs = output_abs / output_max
+    if target_max > 0:
+        target_abs = target_abs / target_max
+    return np.abs(output_abs - target_abs)
+
+
 def save_frame_grid(
     case_id: str,
     arrays_by_label: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]],
@@ -196,7 +208,10 @@ def save_frame_grid(
     gt_frames = [arrays_by_label[label][2][:, :, slice_index, time_index] for label in labels]
     display_vmax = image_limits(gt_frames, percentile)
     error_frames = [
-        np.abs(arrays_by_label[label][1][:, :, slice_index, time_index] - arrays_by_label[label][2][:, :, slice_index, time_index])
+        normalized_abs_error(
+            arrays_by_label[label][1][:, :, slice_index, time_index],
+            arrays_by_label[label][2][:, :, slice_index, time_index],
+        )
         for label in labels
     ]
     error_vmax = image_limits(error_frames, error_percentile)
@@ -217,7 +232,18 @@ def save_frame_grid(
             axis.axis("off")
             fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
             if col == 0:
-                axis.set_ylabel(row_label, rotation=0, ha="right", va="center", labelpad=48, fontsize=12)
+                axis.text(
+                    -0.12,
+                    0.5,
+                    row_label,
+                    transform=axis.transAxes,
+                    ha="right",
+                    va="center",
+                    fontsize=12,
+                    fontweight="bold",
+                    rotation=90,
+                    clip_on=False,
+                )
     fig.suptitle(f"{case_id} {mode}: slice={slice_index}, time={time_index}")
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -241,7 +267,10 @@ def save_yt_grid(
     gt_planes = [arrays_by_label[label][2][x_index, :, slice_index, :] for label in labels]
     display_vmax = image_limits(gt_planes, percentile)
     error_planes = [
-        np.abs(arrays_by_label[label][1][x_index, :, slice_index, :] - arrays_by_label[label][2][x_index, :, slice_index, :])
+        normalized_abs_error(
+            arrays_by_label[label][1][x_index, :, slice_index, :],
+            arrays_by_label[label][2][x_index, :, slice_index, :],
+        )
         for label in labels
     ]
     error_vmax = image_limits(error_planes, error_percentile)
@@ -261,7 +290,19 @@ def save_yt_grid(
             im = axis.imshow(np.abs(plane), cmap=cmap, origin="lower", aspect="auto", vmax=vmax)
             axis.set_xlabel("time")
             if col == 0:
-                axis.set_ylabel(f"{row_label}\nphase")
+                axis.set_ylabel("phase")
+                axis.text(
+                    -0.20,
+                    0.5,
+                    row_label,
+                    transform=axis.transAxes,
+                    ha="right",
+                    va="center",
+                    fontsize=12,
+                    fontweight="bold",
+                    rotation=90,
+                    clip_on=False,
+                )
             else:
                 axis.set_ylabel("")
             fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
@@ -300,9 +341,9 @@ def save_time_gif(
     ]
     display_vmax = image_limits(gt_frames, percentile)
     error_frames = [
-        np.abs(
-            arrays_by_label[label][1][:, :, slice_index, time_index]
-            - arrays_by_label[label][2][:, :, slice_index, time_index]
+        normalized_abs_error(
+            arrays_by_label[label][1][:, :, slice_index, time_index],
+            arrays_by_label[label][2][:, :, slice_index, time_index],
         )
         for label in labels
         for time_index in range(num_times)
@@ -314,7 +355,7 @@ def save_time_gif(
         fig, axes = plt.subplots(4, len(labels), figsize=(4.0 * len(labels), 12.0), squeeze=False)
         for col, label in enumerate(labels):
             input_image, pred, gt = arrays_by_label[label]
-            error = np.abs(pred[:, :, slice_index, time_index] - gt[:, :, slice_index, time_index])
+            error = normalized_abs_error(pred[:, :, slice_index, time_index], gt[:, :, slice_index, time_index])
             panels = [
                 ("Input", input_image[:, :, slice_index, time_index], "gray", display_vmax),
                 ("GT", gt[:, :, slice_index, time_index], "gray", display_vmax),
@@ -327,7 +368,18 @@ def save_time_gif(
                 axis.imshow(np.abs(image).T, cmap=cmap, origin="lower", vmax=vmax)
                 axis.axis("off")
                 if col == 0:
-                    axis.set_ylabel(row_label, rotation=0, ha="right", va="center", labelpad=48, fontsize=12)
+                    axis.text(
+                        -0.12,
+                        0.5,
+                        row_label,
+                        transform=axis.transAxes,
+                        ha="right",
+                        va="center",
+                        fontsize=12,
+                        fontweight="bold",
+                        rotation=90,
+                        clip_on=False,
+                    )
         fig.suptitle(f"{case_id} {mode}: slice={slice_index}, time={time_index}")
         fig.tight_layout()
         frames.append(Image.fromarray(figure_to_rgb(fig)))
