@@ -97,11 +97,12 @@ def save_case_grid(
     gt_key: str,
     percentile: float,
     error_percentile: float,
-    zoom_error_percentile: float,
     slice_index: Optional[int],
     time_index: Optional[int],
 ) -> Path:
     import matplotlib.pyplot as plt
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
     import numpy as np
 
     gt_path = gt_root / f"{case_id}.mat"
@@ -132,38 +133,50 @@ def save_case_grid(
 
     image_vmax = np.percentile(np.stack([gt_frame, *pred_frames]), percentile)
     if not np.isfinite(image_vmax) or image_vmax <= 0:
-        image_vmax = None
+        image_vmax = float(np.max(np.stack([gt_frame, *pred_frames])))
     error_vmax = np.percentile(np.stack(error_frames), error_percentile)
     if not np.isfinite(error_vmax) or error_vmax <= 0:
-        error_vmax = None
-    zoom_error_vmax = np.percentile(np.stack(error_frames), zoom_error_percentile)
-    if not np.isfinite(zoom_error_vmax) or zoom_error_vmax <= 0:
-        zoom_error_vmax = error_vmax
+        error_vmax = float(np.max(np.stack(error_frames)))
 
-    num_cols = len(acc_inputs) + 1
+    num_cols = len(acc_inputs)
     fig, axes = plt.subplots(3, num_cols, figsize=(4.0 * num_cols, 10.0), squeeze=False)
-
-    axes[0, 0].imshow(gt_frame.T, cmap="gray", origin="lower", vmax=image_vmax)
-    axes[0, 0].set_title("GT")
-    axes[0, 0].axis("off")
-    for row in (1, 2):
-        axes[row, 0].axis("off")
 
     for col, (title, pred_frame, error_frame) in enumerate(
         zip(titles, pred_frames, error_frames),
-        start=1,
     ):
         panels = [
-            (0, pred_frame, "gray", None, image_vmax, title),
-            (1, error_frame, "magma", None, error_vmax, "Abs error"),
-            (2, error_frame, "magma", None, zoom_error_vmax, "Abs error zoom"),
+            (0, gt_frame, "gray", None, image_vmax, title),
+            (1, pred_frame, "gray", None, image_vmax, "Recon"),
+            (2, error_frame, "gray", None, error_vmax, "Abs error"),
         ]
         for row, image, cmap, vmin, vmax, title_text in panels:
             axis = axes[row, col]
-            im = axis.imshow(image.T, cmap=cmap, origin="lower", vmin=vmin, vmax=vmax)
+            axis.imshow(image.T, cmap=cmap, origin="lower", vmin=0.0 if vmin is None else vmin, vmax=vmax)
             axis.set_title(title_text)
             axis.axis("off")
-            fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
+            if col == 0:
+                row_label = ["GT", "Recon", "Abs error"][row]
+                axis.text(
+                    -0.08,
+                    0.5,
+                    row_label,
+                    transform=axis.transAxes,
+                    ha="right",
+                    va="center",
+                    fontsize=12,
+                    fontweight="bold",
+                    clip_on=False,
+                )
+
+    for row, vmax in enumerate([image_vmax, image_vmax, error_vmax]):
+        scalar = ScalarMappable(norm=Normalize(vmin=0.0, vmax=vmax), cmap="gray")
+        scalar.set_array([])
+        fig.colorbar(
+            scalar,
+            ax=axes[row, :].ravel().tolist(),
+            fraction=0.018,
+            pad=0.015,
+        )
 
     fig.suptitle(f"{case_id}: slice={selected_slice}, time={selected_time}", fontsize=14)
     fig.tight_layout()
@@ -203,12 +216,6 @@ def main() -> None:
     parser.add_argument("--gt-key", default="gt", help="MAT key containing the ground truth.")
     parser.add_argument("--percentile", type=float, default=99.5, help="Display percentile for GT/recon panels.")
     parser.add_argument("--error-percentile", type=float, default=99.0, help="Display percentile for absolute error.")
-    parser.add_argument(
-        "--zoom-error-percentile",
-        type=float,
-        default=95.0,
-        help="Display percentile for the third-row high-contrast absolute error map.",
-    )
     parser.add_argument("--slice-index", type=int, default=None, help="Slice to visualize; default is center slice.")
     parser.add_argument("--time-index", type=int, default=None, help="Time frame to visualize; default is center frame.")
     args = parser.parse_args()
@@ -235,7 +242,6 @@ def main() -> None:
             gt_key=args.gt_key,
             percentile=args.percentile,
             error_percentile=args.error_percentile,
-            zoom_error_percentile=args.zoom_error_percentile,
             slice_index=args.slice_index,
             time_index=args.time_index,
         )

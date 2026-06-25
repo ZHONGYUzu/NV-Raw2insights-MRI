@@ -811,11 +811,13 @@ output/CINE1_acc_comparison_mat_gt/Sub0010_slice06_time12.png
 Image format:
 
 ```text
-columns: GT | acc2 | acc4 | acc8 | acc16
-row 1:   GT image and reconstruction images
-row 2:   absolute error maps
-row 3:   high-contrast absolute error maps, not signed difference
+columns: acc2 | acc4 | acc8 | acc16
+row 1:   GT image
+row 2:   reconstruction image
+row 3:   absolute error map, abs(recon - GT)
 ```
+
+The comparison PNG intentionally omits the narrow right-side y-t strip next to each image. It keeps one shared colorbar per row at the far right of the figure.
 
 This is the preferred visual format for comparing acceleration settings on the same slice/time frame.
 
