@@ -115,7 +115,7 @@ def save_case_grid(
 
     pred_frames = []
     error_frames = []
-    titles = []
+    column_titles = []
     for label, pred_dir in acc_inputs:
         pred_path = pred_dir / f"{case_id}.mat"
         if not pred_path.is_file():
@@ -129,7 +129,7 @@ def save_case_grid(
         psnr, nrmse = frame_metrics(pred_frame, gt_frame)
         pred_frames.append(pred_frame)
         error_frames.append(error_frame)
-        titles.append(f"{label}\nPSNR {psnr:.2f} dB | NRMSE {nrmse:.4f}")
+        column_titles.append(f"{label}\nPSNR {psnr:.2f} dB\nNRMSE {nrmse:.4f}")
 
     image_vmax = np.percentile(np.stack([gt_frame, *pred_frames]), percentile)
     if not np.isfinite(image_vmax) or image_vmax <= 0:
@@ -139,25 +139,38 @@ def save_case_grid(
         error_vmax = float(np.max(np.stack(error_frames)))
 
     num_cols = len(acc_inputs)
-    fig, axes = plt.subplots(3, num_cols, figsize=(4.0 * num_cols, 10.0), squeeze=False)
+    fig = plt.figure(figsize=(3.7 * num_cols + 1.0, 9.8))
+    grid = fig.add_gridspec(
+        3,
+        num_cols + 1,
+        width_ratios=[1.0] * num_cols + [0.055],
+        wspace=0.08,
+        hspace=0.10,
+    )
+    axes = np.empty((3, num_cols), dtype=object)
+    cbar_axes = []
+    for row in range(3):
+        for col in range(num_cols):
+            axes[row, col] = fig.add_subplot(grid[row, col])
+        cbar_axes.append(fig.add_subplot(grid[row, num_cols]))
 
     for col, (title, pred_frame, error_frame) in enumerate(
-        zip(titles, pred_frames, error_frames),
+        zip(column_titles, pred_frames, error_frames),
     ):
         panels = [
-            (0, gt_frame, "gray", None, image_vmax, title),
-            (1, pred_frame, "gray", None, image_vmax, "Recon"),
-            (2, error_frame, "gray", None, error_vmax, "Abs error"),
+            (0, gt_frame, "gray", None, image_vmax),
+            (1, pred_frame, "gray", None, image_vmax),
+            (2, error_frame, "gray", None, error_vmax),
         ]
-        for row, image, cmap, vmin, vmax, title_text in panels:
+        axes[0, col].set_title(title, fontsize=11, pad=8)
+        for row, image, cmap, vmin, vmax in panels:
             axis = axes[row, col]
             axis.imshow(image.T, cmap=cmap, origin="lower", vmin=0.0 if vmin is None else vmin, vmax=vmax)
-            axis.set_title(title_text)
             axis.axis("off")
             if col == 0:
                 row_label = ["GT", "Recon", "Abs error"][row]
                 axis.text(
-                    -0.08,
+                    -0.14,
                     0.5,
                     row_label,
                     transform=axis.transAxes,
@@ -165,21 +178,17 @@ def save_case_grid(
                     va="center",
                     fontsize=12,
                     fontweight="bold",
+                    rotation=90,
                     clip_on=False,
                 )
 
     for row, vmax in enumerate([image_vmax, image_vmax, error_vmax]):
         scalar = ScalarMappable(norm=Normalize(vmin=0.0, vmax=vmax), cmap="gray")
         scalar.set_array([])
-        fig.colorbar(
-            scalar,
-            ax=axes[row, :].ravel().tolist(),
-            fraction=0.018,
-            pad=0.015,
-        )
+        fig.colorbar(scalar, cax=cbar_axes[row])
 
     fig.suptitle(f"{case_id}: slice={selected_slice}, time={selected_time}", fontsize=14)
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.04)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{case_id}_slice{selected_slice:02d}_time{selected_time:02d}.png"
     fig.savefig(output_path, dpi=150, bbox_inches="tight")

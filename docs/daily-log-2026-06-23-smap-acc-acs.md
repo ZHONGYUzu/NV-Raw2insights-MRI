@@ -817,7 +817,7 @@ row 2:   reconstruction image
 row 3:   absolute error map, abs(recon - GT)
 ```
 
-The comparison PNG intentionally omits the narrow right-side y-t strip next to each image. It keeps one shared colorbar per row at the far right of the figure.
+The comparison PNG intentionally omits the narrow right-side y-t strip next to each image. It keeps one shared colorbar per row in a separate far-right column, away from the image grid. Row labels are vertical on the left side: `GT`, `Recon`, and `Abs error`.
 
 This is the preferred visual format for comparing acceleration settings on the same slice/time frame.
 
