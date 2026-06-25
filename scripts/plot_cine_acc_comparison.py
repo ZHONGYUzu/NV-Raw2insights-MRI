@@ -166,7 +166,7 @@ def ifft2c(kspace: np.ndarray) -> np.ndarray:
     return np.fft.fftshift(image, axes=(-2, -1))
 
 
-def load_zero_filled_input(json_path: Path) -> np.ndarray:
+def load_zero_filled_input_and_mask(json_path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     import numpy as np
 
     with json_path.open() as descriptor_file:
@@ -185,7 +185,9 @@ def load_zero_filled_input(json_path: Path) -> np.ndarray:
 
     image = ifft2c(kspace * mask)
     rss = np.sqrt(np.sum(np.abs(image) ** 2, axis=2)).astype(np.float32)  # (time, slice, phase, frequency)
-    return rss.transpose(3, 2, 1, 0)  # (frequency, phase, slice, time)
+    mask_time_phase = mask[:, 0, 0, :, 0].astype(np.float32)
+    sampled_per_frame = mask_time_phase.sum(axis=1)
+    return rss.transpose(3, 2, 1, 0), mask_time_phase, sampled_per_frame  # (frequency, phase, slice, time)
 
 
 def save_case_grid(
@@ -214,6 +216,7 @@ def save_case_grid(
     pred_frames = []
     input_frames = []
     error_frames = []
+    mask_frames = []
     titles = []
     for label, pred_dir in acc_inputs:
         pred_path = pred_dir / f"{case_id}.mat"
@@ -222,7 +225,7 @@ def save_case_grid(
             raise FileNotFoundError(f"{label}: missing prediction {pred_path}")
         if not json_path.is_file():
             raise FileNotFoundError(f"{label}: missing input descriptor {json_path}")
-        input_image = load_zero_filled_input(json_path)
+        input_image, mask_time_phase, sampled_per_frame = load_zero_filled_input_and_mask(json_path)
         pred = load_prediction(pred_path, key)
         if pred.shape != gt.shape:
             raise ValueError(f"{label} {case_id}: pred shape {pred.shape} != GT shape {gt.shape}")
@@ -232,10 +235,16 @@ def save_case_grid(
         pred_frame = pred[:, :, selected_slice, selected_time]
         error_frame = np.abs(pred_frame - gt_frame)
         psnr, nrmse = frame_metrics(pred_frame, gt_frame)
+        effective_acc = mask_time_phase.size / mask_time_phase.sum()
+        frame_acc = mask_time_phase.shape[1] / sampled_per_frame[selected_time]
         input_frames.append(input_frame)
         pred_frames.append(pred_frame)
         error_frames.append(error_frame)
-        titles.append(f"{label}\nPSNR {psnr:.2f} dB | NRMSE {nrmse:.4f}")
+        mask_frames.append(mask_time_phase[selected_time : selected_time + 1, :])
+        titles.append(
+            f"{label}\nPSNR {psnr:.2f} dB | NRMSE {nrmse:.4f}\n"
+            f"eff {effective_acc:.2f}x | frame {frame_acc:.2f}x"
+        )
 
     image_vmax = np.percentile(np.stack([*input_frames, *pred_frames, gt_frame]), percentile)
     if not np.isfinite(image_vmax) or image_vmax <= 0:
@@ -245,9 +254,10 @@ def save_case_grid(
         error_vmax = None
 
     num_cols = len(acc_inputs)
-    fig, axes = plt.subplots(4, num_cols, figsize=(4.0 * num_cols, 12.0), squeeze=False)
+    fig, axes = plt.subplots(5, num_cols, figsize=(4.0 * num_cols, 13.2), squeeze=False)
     for col, title in enumerate(titles):
         panels = [
+            ("Mask", mask_frames[col], "gray", 1.0),
             ("Input", input_frames[col], "gray", image_vmax),
             ("Recon", pred_frames[col], "gray", image_vmax),
             ("GT", gt_frame, "gray", image_vmax),
@@ -256,9 +266,15 @@ def save_case_grid(
         axes[0, col].set_title(title)
         for row, (row_label, image, cmap, vmax) in enumerate(panels):
             axis = axes[row, col]
-            im = axis.imshow(image.T, cmap=cmap, origin="lower", vmax=vmax)
-            axis.axis("off")
-            fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
+            if row == 0:
+                im = axis.imshow(image, cmap=cmap, origin="lower", aspect="auto", vmin=0.0, vmax=vmax)
+                axis.set_xlabel("phase")
+                axis.set_yticks([])
+            else:
+                im = axis.imshow(image.T, cmap=cmap, origin="lower", vmax=vmax)
+                axis.axis("off")
+            if row != 0:
+                fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
             if col == 0:
                 axis.text(
                     -0.08,
