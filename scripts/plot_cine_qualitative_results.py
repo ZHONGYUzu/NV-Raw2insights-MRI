@@ -187,8 +187,8 @@ def save_frame_grid(
         input_image, pred, gt = arrays_by_label[label]
         panels = [
             ("Input", input_image[:, :, slice_index, time_index], "gray", display_vmax),
-            ("Recon", pred[:, :, slice_index, time_index], "gray", display_vmax),
             ("GT", gt[:, :, slice_index, time_index], "gray", display_vmax),
+            ("Recon", pred[:, :, slice_index, time_index], "gray", display_vmax),
             ("Abs error", error_frames[col], "magma", error_vmax),
         ]
         axes[0, col].set_title(label)
@@ -232,8 +232,8 @@ def save_yt_grid(
         input_image, pred, gt = arrays_by_label[label]
         panels = [
             ("Input", input_image[x_index, :, slice_index, :], "gray", display_vmax),
-            ("Recon", pred[x_index, :, slice_index, :], "gray", display_vmax),
             ("GT", gt[x_index, :, slice_index, :], "gray", display_vmax),
+            ("Recon", pred[x_index, :, slice_index, :], "gray", display_vmax),
             ("Abs error", error_planes[col], "magma", error_vmax),
         ]
         axes[0, col].set_title(label)
@@ -298,8 +298,8 @@ def save_time_gif(
             error = np.abs(pred[:, :, slice_index, time_index] - gt[:, :, slice_index, time_index])
             panels = [
                 ("Input", input_image[:, :, slice_index, time_index], "gray", display_vmax),
-                ("Recon", pred[:, :, slice_index, time_index], "gray", display_vmax),
                 ("GT", gt[:, :, slice_index, time_index], "gray", display_vmax),
+                ("Recon", pred[:, :, slice_index, time_index], "gray", display_vmax),
                 ("Abs error", error, "magma", error_vmax),
             ]
             axes[0, col].set_title(label)
