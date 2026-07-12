@@ -135,6 +135,7 @@ checkpoints/
 *.pth
 *.ckpt
 
+#skills relevant
 .agents/skills/
 .claude_resources.json
 skills-lock.json
