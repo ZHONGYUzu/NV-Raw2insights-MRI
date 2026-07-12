@@ -43,8 +43,10 @@ Output MAT key and layout:
 ```text
 key: gt
 shape: (frequency, phase, slice, time)
-expected shape: (176, 132, 12, 25)
 ```
+
+Do not assume all selected subjects have identical spatial size or slice count.
+Record the actual shape for every case during verification.
 
 Normalization:
 
@@ -92,7 +94,7 @@ PY
 Expected pattern:
 
 ```text
-Sub0014.mat (176, 132, 12, 25) float32 True <min> <max>
+Sub0014.mat (<frequency>, <phase>, <slice>, 25) float32 True <min> <max>
 ```
 
 There should be 10 MAT files, one for each selected test subject.
@@ -119,9 +121,10 @@ output/GT_from_dImgC_figs/Sub0122.png
 
 ### Generate GT GIFs
 
-Create one temporal GIF per selected subject for a representative slice. The
-example below uses zero-based slice index `6`, near the middle of the 12-slice
-CINE volume.
+Create one temporal GIF per selected subject for a representative slice. Leave
+`--slice-index` unset so `scripts/make_cine_gif.py` automatically selects the
+center slice for each case. This matters because the selected subjects may have
+different slice counts.
 
 ```bash
 SUBJECTS="Sub0014 Sub0026 Sub0030 Sub0047 Sub0049 Sub0051 Sub0096 Sub0105 Sub0112 Sub0122"
@@ -130,7 +133,6 @@ for sub in $SUBJECTS; do
   python scripts/make_cine_gif.py \
     "dataset/GT_from_dImgC/${sub}.mat" \
     --key gt \
-    --slice-index 6 \
     -o output/GT_from_dImgC_gifs \
     --fps 5 \
     --percentile 99.5 \
@@ -141,13 +143,16 @@ done
 Expected output:
 
 ```text
-output/GT_from_dImgC_gifs/Sub0014_slice06_allframes.gif
+output/GT_from_dImgC_gifs/Sub0014_slice##_allframes.gif
 ...
-output/GT_from_dImgC_gifs/Sub0122_slice06_allframes.gif
+output/GT_from_dImgC_gifs/Sub0122_slice##_allframes.gif
 ```
 
 Use these GIFs to check temporal motion, intensity consistency, and obvious
 slice/time orientation problems before running model evaluation.
+
+If a fixed slice is required for a specific figure, first inspect each GT shape
+and only use a slice index that exists for every selected case.
 
 ### Record After Completion
 
@@ -161,6 +166,6 @@ GT MAT key: gt
 GT layout: frequency, phase, slice, time
 GT thumbnail output: output/GT_from_dImgC_figs
 GT GIF output: output/GT_from_dImgC_gifs
-GT GIF slice index: 6
+GT GIF slice index: center slice selected per case
 Selected subjects file: docs/test_subjects.txt
 ```
