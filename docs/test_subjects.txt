@@ -1,0 +1,22 @@
+# Fixed Test Subjects
+
+Purpose: shared test set for all benchmark experiments so model, mask, and noise
+scenario comparisons use the same subjects.
+
+Selection date: 2026-07-11
+Candidate pool: Sub0001-Sub0130
+Selection method: random sample without replacement
+Random seed: 20260711
+Number of subjects: 10
+Case numbers: 14, 26, 30, 47, 49, 51, 96, 105, 112, 122
+
+Sub0014
+Sub0026
+Sub0030
+Sub0047
+Sub0049
+Sub0051
+Sub0096
+Sub0105
+Sub0112
+Sub0122
