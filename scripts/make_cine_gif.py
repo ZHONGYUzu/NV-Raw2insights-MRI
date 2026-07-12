@@ -85,6 +85,17 @@ def make_gif(
     print(f"frames={len(frames)} slice={slice_index} fps={fps:g} shape={img.shape}")
 
 
+def resolve_slice_index(mat_path: Path, key: str, slice_index: int | None) -> int:
+    img = read_mat_key(mat_path, key).squeeze()
+    if img.ndim != 4:
+        raise ValueError(f"{mat_path}: expected 4D array (frequency, phase, slice, time), got {img.shape}")
+    num_slices = img.shape[2]
+    selected = num_slices // 2 if slice_index is None else slice_index
+    if not 0 <= selected < num_slices:
+        raise ValueError(f"slice index {selected} outside [0, {num_slices - 1}]")
+    return selected
+
+
 def default_output_path(mat_path: Path, output_dir: Path, slice_index: int) -> Path:
     return output_dir / f"{mat_path.stem}_slice{slice_index:02d}_allframes.gif"
 
@@ -92,7 +103,12 @@ def default_output_path(mat_path: Path, output_dir: Path, slice_index: int) -> P
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mat_path", type=Path, help="Prediction MAT file containing img4ranking.")
-    parser.add_argument("--slice-index", type=int, required=True, help="Slice index to animate.")
+    parser.add_argument(
+        "--slice-index",
+        type=int,
+        default=None,
+        help="Slice index to animate. Defaults to the center slice.",
+    )
     parser.add_argument(
         "-o",
         "--output-dir",
@@ -120,6 +136,7 @@ def main() -> None:
         help="Transpose each frame for display, useful if matching GT comparison PNG orientation.",
     )
     args = parser.parse_args()
+    slice_index = resolve_slice_index(args.mat_path, args.key, args.slice_index)
 
     if args.output_path is not None:
         output_path = args.output_path
@@ -127,13 +144,13 @@ def main() -> None:
         output_dir = args.output_dir
         if output_dir is None:
             output_dir = args.mat_path.parent.parent / "gifs"
-        output_path = default_output_path(args.mat_path, output_dir, args.slice_index)
+        output_path = default_output_path(args.mat_path, output_dir, slice_index)
 
     make_gif(
         mat_path=args.mat_path,
         output_path=output_path,
         key=args.key,
-        slice_index=args.slice_index,
+        slice_index=slice_index,
         fps=args.fps,
         percentile=args.percentile,
         per_frame_normalize=args.per_frame_normalize,
