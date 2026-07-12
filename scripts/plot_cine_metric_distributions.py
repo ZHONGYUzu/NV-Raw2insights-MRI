@@ -84,7 +84,7 @@ def main() -> None:
     parser.add_argument(
         "--metrics",
         nargs="+",
-        default=["psnr", "nrmse", "nmse", "mse", "mae"],
+        default=["nrmse", "psnr", "ssim"],
         help="Metric columns to plot.",
     )
     parser.add_argument(

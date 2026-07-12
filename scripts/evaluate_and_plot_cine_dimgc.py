@@ -21,11 +21,22 @@ try:
 except ImportError:
     scipy = None
 
+try:
+    from skimage.metrics import structural_similarity
+except ImportError:
+    structural_similarity = None
+
 
 def require_scipy_io():
     if scipy is None:
         raise ImportError("scipy is required to load MATLAB .mat files")
     return scipy.io
+
+
+def require_structural_similarity():
+    if structural_similarity is None:
+        raise ImportError("scikit-image is required to compute SSIM")
+    return structural_similarity
 
 
 def parse_label_path(value: str) -> Tuple[str, Path]:
@@ -161,16 +172,16 @@ def normalize_volume(image: np.ndarray, mode: str) -> np.ndarray:
 
 
 def frame_metrics(pred_frame: np.ndarray, gt_frame: np.ndarray) -> Dict[str, float]:
+    ssim_fn = require_structural_similarity()
     diff = pred_frame.astype(np.float32) - gt_frame.astype(np.float32)
     squared_error = float(np.sum(diff**2))
     gt_squared = float(np.sum(gt_frame.astype(np.float32) ** 2))
     mse = float(np.mean(diff**2))
-    mae = float(np.mean(np.abs(diff)))
     nrmse = float(np.sqrt(squared_error) / np.sqrt(gt_squared)) if gt_squared > 0 else float("nan")
-    nmse = float(squared_error / gt_squared) if gt_squared > 0 else float("nan")
     data_range = float(gt_frame.max() - gt_frame.min())
     psnr = float("nan") if mse <= 0 or data_range <= 0 else float(20.0 * np.log10(data_range / np.sqrt(mse)))
-    return {"psnr": psnr, "nrmse": nrmse, "nmse": nmse, "mse": mse, "mae": mae}
+    ssim = float("nan") if data_range <= 0 else float(ssim_fn(gt_frame, pred_frame, data_range=data_range))
+    return {"nrmse": nrmse, "psnr": psnr, "ssim": ssim}
 
 
 def collect_cases(acc_inputs: Sequence[Tuple[str, Path]], selected_cases: Optional[Sequence[str]], case_glob: str) -> List[str]:
@@ -397,8 +408,8 @@ def main() -> None:
     parser.add_argument(
         "--metrics",
         nargs="+",
-        default=["psnr", "nrmse", "nmse", "mse", "mae"],
-        choices=["psnr", "nrmse", "nmse", "mse", "mae"],
+        default=["nrmse", "psnr", "ssim"],
+        choices=["nrmse", "psnr", "ssim"],
         help="Metrics to summarize.",
     )
     args = parser.parse_args()
