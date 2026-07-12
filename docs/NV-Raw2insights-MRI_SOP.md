@@ -489,6 +489,44 @@ python scripts/inference.py \
 
 ### Recorded Full Inference Timing
 
+Confirmed acc8 completion/resume inference command:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base.json \
+  -i dataset/CINE_test_acc8/json_input \
+  -o output/CINE_test_acc8 \
+  --profile-timing
+```
+
+Observed acc8 resume run:
+
+```text
+node: node-gpu-07
+model: NV-Raw2Insights-MRI Base
+checkpoint: nv_raw2insights_mri_base.pt from nvidia/NV-Raw2insights-MRI
+model parameters: 758.91M
+test files before filtering: 10
+test files after filtering: 2
+processed cases in this run: 2/10
+total elapsed time for this resume run: 46.78 mins
+```
+
+Interpretation:
+
+```text
+This was not a fresh 10-case acc8 run. Inference skipped cases whose MAT files
+already existed under output/CINE_test_acc8/val_img4ranking and processed only
+the remaining two cases, Sub0112 and Sub0122.
+```
+
+Per-case acc8 timing from this resume run:
+
+| Case | Slices | Frames | Forwards | Total time (s) | Total time (min) | Model time/forward (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Sub0112 | 18 | 25 | 450 | 1678.18 | 27.97 | 3.696 |
+| Sub0122 | 12 | 25 | 300 | 1070.48 | 17.84 | 3.535 |
+
 Confirmed acc16 full inference command:
 
 ```bash
