@@ -169,3 +169,46 @@ GT GIF output: output/GT_from_dImgC_gifs
 GT GIF slice index: center slice selected per case
 Selected subjects file: docs/test_subjects.txt
 ```
+
+## Step 2: Inspect H5 Shapes Before Inference Dataset Conversion
+
+Goal: confirm each selected subject's H5 dimensions before creating converted
+k-space and mask files. The selected in-house cases may have different
+frequency size, phase size, and slice count, so do not hardcode
+`--frequency-size 176` unless this inspection confirms it for the cases being
+converted.
+
+```bash
+python scripts/inspect_cine_h5_shapes.py \
+  --input-h5-dir /mnt/qdata/rawdata/CINE/2D_h5_compressed \
+  --subjects-file docs/test_subjects.txt
+```
+
+The script prints one CSV-style row per selected case:
+
+```text
+case,dImgC(slice,cha,time,PE,FE),dMap(slice,coil,time,PE,FE),kSpace(slice,coil,time,PE,FE),logical kspace(time,slice,coil,PE,FE),PE,FE,time,slices,coils
+```
+
+It also prints a summary of unique k-space shapes and mask spatial
+requirements:
+
+```text
+mask spatial requirements (PE, FE):
+  <PE>x<FE>: <count>
+```
+
+Use the `FE` value from this table as `--frequency-size` when converting VISTA
+masks for each case or group of cases. If multiple `(PE, FE)` groups appear,
+convert masks separately per group and validate each generated JSON before
+inference.
+
+Record these details before inference:
+
+```text
+H5 shape inspection command:
+H5 shape inspection output/log:
+Unique kSpace shapes:
+Unique mask spatial requirements:
+Cases per frequency size:
+```
