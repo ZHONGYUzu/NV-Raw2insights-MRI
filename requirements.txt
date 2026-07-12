@@ -13,5 +13,6 @@ scipy
 scikit-image==0.23.2
 wandb
 matplotlib
+pillow
 SimpleITK
 huggingface_hub
