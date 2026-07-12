@@ -208,7 +208,7 @@ def image_vmax(images: Sequence[np.ndarray], percentile: float) -> Optional[floa
     return vmax if np.isfinite(vmax) and vmax > 0 else None
 
 
-def save_three_row_plot(
+def save_recon_error_plot(
     case_id: str,
     arrays_by_label: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]],
     output_path: Path,
@@ -220,6 +220,7 @@ def save_three_row_plot(
 
     labels = list(arrays_by_label)
     display_frames = []
+    error_frames = []
     for input_image, gt, pred in arrays_by_label.values():
         display_frames.extend(
             [
@@ -228,20 +229,24 @@ def save_three_row_plot(
                 pred[:, :, slice_index, time_index],
             ]
         )
+        error_frames.append(np.abs(pred[:, :, slice_index, time_index] - gt[:, :, slice_index, time_index]))
     vmax = image_vmax(display_frames, percentile)
+    error_vmax = image_vmax(error_frames, percentile)
 
-    fig, axes = plt.subplots(3, len(labels), figsize=(4.0 * len(labels), 9.0), squeeze=False)
+    fig, axes = plt.subplots(4, len(labels), figsize=(4.0 * len(labels), 12.0), squeeze=False)
     for col, label in enumerate(labels):
         input_image, gt, pred = arrays_by_label[label]
+        error = np.abs(pred[:, :, slice_index, time_index] - gt[:, :, slice_index, time_index])
         panels = [
-            ("Input", input_image[:, :, slice_index, time_index]),
-            ("GT dImgC", gt[:, :, slice_index, time_index]),
-            ("Recon", pred[:, :, slice_index, time_index]),
+            ("Input", input_image[:, :, slice_index, time_index], "gray", vmax),
+            ("GT dImgC", gt[:, :, slice_index, time_index], "gray", vmax),
+            ("Recon", pred[:, :, slice_index, time_index], "gray", vmax),
+            ("Abs error", error, "magma", error_vmax),
         ]
         axes[0, col].set_title(label)
-        for row, (row_label, image) in enumerate(panels):
+        for row, (row_label, image, cmap, panel_vmax) in enumerate(panels):
             axis = axes[row, col]
-            im = axis.imshow(np.abs(image).T, cmap="gray", origin="lower", vmax=vmax)
+            im = axis.imshow(np.abs(image).T, cmap=cmap, origin="lower", vmax=panel_vmax)
             axis.axis("off")
             fig.colorbar(im, ax=axis, fraction=0.046, pad=0.04)
             if col == 0:
@@ -347,8 +352,8 @@ def evaluate_and_plot_case(
                 )
 
     selected_slice, selected_time = choose_indices(gt.shape, slice_index, time_index)
-    plot_path = output_dir / "plots" / f"{case_id}_slice{selected_slice:02d}_time{selected_time:02d}_input_gt_recon.png"
-    save_three_row_plot(case_id, arrays_by_label, plot_path, selected_slice, selected_time, percentile)
+    plot_path = output_dir / "plots" / f"{case_id}_slice{selected_slice:02d}_time{selected_time:02d}_input_gt_recon_error.png"
+    save_recon_error_plot(case_id, arrays_by_label, plot_path, selected_slice, selected_time, percentile)
     print(f"{case_id}: saved {plot_path}")
     return rows
 
