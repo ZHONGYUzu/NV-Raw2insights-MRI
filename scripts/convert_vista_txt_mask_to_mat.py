@@ -78,9 +78,17 @@ def convert_mask(
         mask_time_phase[:, start : start + acs_lines] = 1.0
     mask = np.repeat(mask_time_phase[:, :, None], frequency_size, axis=2)
 
-    kspace_path = (
-        output_root / "MultiCoil" / "Cine" / "UnderSample_TaskR1" / f"{case_id}_kspace_full.mat"
-    )
+    json_path = output_root / "json_input" / f"{case_id}.json"
+    kspace_path = None
+    if json_path.exists():
+        with json_path.open() as descriptor_file:
+            descriptor = json.load(descriptor_file)
+        if descriptor.get("kspace"):
+            kspace_path = Path(descriptor["kspace"])
+    if kspace_path is None:
+        kspace_path = (
+            output_root / "MultiCoil" / "Cine" / "UnderSample_TaskR1" / f"{case_id}_kspace_full.mat"
+        )
     if not kspace_path.exists():
         raise FileNotFoundError(f"Convert k-space first; expected {kspace_path}")
     output_path = output_root / "MultiCoil" / "Cine" / "Mask_TaskR1" / f"{case_id}_mask_{mask_type}.mat"
@@ -88,7 +96,6 @@ def convert_mask(
         raise FileExistsError(f"Output exists: {output_path}; use --overwrite")
     save_mat_atomic(output_path, {"mask": mask})
 
-    json_path = output_root / "json_input" / f"{case_id}.json"
     update_case_json(json_path, kspace_path, output_path)
     return output_path, json_path
 

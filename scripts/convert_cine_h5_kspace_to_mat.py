@@ -52,12 +52,14 @@ def convert_file(
     output_root: Path,
     dataset_key: str,
     smap_key: str | None,
+    kspace_subdir: str,
+    smap_subdir: str,
     overwrite: bool,
 ) -> tuple[Path, Path, Path | None]:
     case_id = input_path.stem
-    output_path = output_root / "MultiCoil" / "Cine" / "UnderSample_TaskR1" / f"{case_id}_kspace_full.mat"
+    output_path = output_root / "MultiCoil" / "Cine" / kspace_subdir / f"{case_id}_kspace_full.mat"
     smap_path = (
-        output_root / "MultiCoil" / "Cine" / "SensitivityMap_TaskR1" / f"{case_id}_sensitivity_maps.mat"
+        output_root / "MultiCoil" / "Cine" / smap_subdir / f"{case_id}_sensitivity_maps.mat"
         if smap_key
         else None
     )
@@ -116,6 +118,16 @@ def main() -> None:
         default=None,
         help="Optional H5 sensitivity-map key to convert, for example dMap.",
     )
+    parser.add_argument(
+        "--kspace-subdir",
+        default="UnderSample_TaskR1",
+        help="Subdirectory under MultiCoil/Cine for converted k-space.",
+    )
+    parser.add_argument(
+        "--smap-subdir",
+        default="SensitivityMap_TaskR1",
+        help="Subdirectory under MultiCoil/Cine for converted sensitivity maps.",
+    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -125,7 +137,13 @@ def main() -> None:
 
     for input_path in inputs:
         output_path, json_path, smap_path = convert_file(
-            input_path, args.output_root, args.dataset_key, args.smap_key, args.overwrite
+            input_path,
+            args.output_root,
+            args.dataset_key,
+            args.smap_key,
+            args.kspace_subdir,
+            args.smap_subdir,
+            args.overwrite,
         )
         print(f"{input_path.name} -> {output_path}")
         if smap_path is not None:
