@@ -1,7 +1,6 @@
 #!/bin/bash
 
 #SBATCH --job-name=cine_h5_r2r3
-#SBATCH --partition=week
 #SBATCH --array=16,24
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
