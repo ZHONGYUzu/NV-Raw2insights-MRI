@@ -15,6 +15,7 @@ REPO_ROOT=/home/students/studxuzho1/NV-Raw2insights-MRI
 SOURCE_ROOT=dataset/h5_converted
 CONFIG=configs/nv_raw2insights_mri_base.json
 MASK_SOURCE=/home/students/studxusiy1/mr_recon/masks
+PYTHON=/home/students/studxuzho1/envs/nv-raw2insights-mri/bin/python
 ACC=${SLURM_ARRAY_TASK_ID}
 
 case "$ACC" in
@@ -37,8 +38,11 @@ case "$ACC" in
 esac
 
 cd "$REPO_ROOT"
-source "$HOME/.bashrc"
-conda activate "$HOME/envs/nv-raw2insights-mri"
+
+if [[ ! -x "$PYTHON" ]]; then
+  echo "Python executable not found or not executable: $PYTHON" >&2
+  exit 2
+fi
 
 echo "Job ID: ${SLURM_JOB_ID:-manual}"
 echo "Array job ID: ${SLURM_ARRAY_JOB_ID:-manual}"
@@ -51,14 +55,16 @@ echo "Source dataset: $SOURCE_ROOT"
 echo "Target dataset: $DATASET_ROOT"
 echo "Mask subdirectory: $MASK_SUBDIR"
 echo "Output root: $OUTPUT_ROOT"
+echo "Python: $PYTHON"
 
 nvidia-smi
+"$PYTHON" --version
 
 create_case () {
   local sub=$1
   local pe=$2
 
-  python scripts/create_custom_cine_acc_dataset.py \
+  "$PYTHON" scripts/create_custom_cine_acc_dataset.py \
     --source-root "$SOURCE_ROOT" \
     --source-kspace-subdir h5_kspace \
     --output-root "$DATASET_ROOT" \
@@ -84,15 +90,15 @@ create_case Sub0105 156
 create_case Sub0112 162
 create_case Sub0122 156
 
-python scripts/validate_cine_inference_data.py \
+"$PYTHON" scripts/validate_cine_inference_data.py \
   "$DATASET_ROOT/json_input" \
   --skip-acs-check \
   --require-smap
 
-python scripts/calculate_mask_acceleration.py \
+"$PYTHON" scripts/calculate_mask_acceleration.py \
   "$DATASET_ROOT/json_input"
 
-python scripts/inference.py \
+"$PYTHON" scripts/inference.py \
   -c "$CONFIG" \
   -i "$DATASET_ROOT/json_input" \
   -o "$OUTPUT_ROOT" \
