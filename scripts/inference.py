@@ -412,6 +412,12 @@ if __name__ == "__main__":
         help="Forward-pass interval for live timing updates (default: 25)",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Override the config DataLoader worker count; use 0 to minimize host-memory usage.",
+    )
+    parser.add_argument(
         "--fixed-mask-types",
         default=None,
         help="Comma-separated fixed mask filters, for example mask_ktRadial4,mask_ktRadial8. Use 'none' to disable filtering.",
@@ -438,6 +444,10 @@ if __name__ == "__main__":
     config.debug = args.debug
     config.profile_timing = args.profile_timing
     config.profile_interval = max(args.profile_interval, 1)
+    if args.num_workers is not None:
+        if args.num_workers < 0:
+            parser.error("--num-workers must be non-negative")
+        config.num_workers = args.num_workers
     if args.fixed_mask_types is not None:
         config.fixed_mask_types = None if args.fixed_mask_types.lower() == "none" else parse_csv_values(args.fixed_mask_types)
     if args.accelerations is not None:

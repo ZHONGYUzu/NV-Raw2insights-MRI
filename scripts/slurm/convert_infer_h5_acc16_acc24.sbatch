@@ -10,6 +10,7 @@
 #SBATCH --error=logs/cine_h5_r2r3_%A_%a.err
 
 set -euo pipefail
+export PYTHONUNBUFFERED=1
 
 REPO_ROOT=/home/students/studxuzho1/NV-Raw2insights-MRI
 SOURCE_ROOT=dataset/h5_converted
@@ -102,6 +103,7 @@ create_case Sub0122 156
   -c "$CONFIG" \
   -i "$DATASET_ROOT/json_input" \
   -o "$OUTPUT_ROOT" \
+  --num-workers 0 \
   --profile-timing
 
 echo "Finished: $(date --iso-8601=seconds)"
