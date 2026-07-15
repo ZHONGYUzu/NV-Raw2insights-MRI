@@ -1,7 +1,9 @@
-# Codex Project Notes
+# Legacy Custom-CINE Baseline Notes
 
-This folder contains focused project notes for Codex sessions and future
-maintenance of the custom CINE workflow.
+This folder documents the original five-case, fixed-shape custom CINE baseline:
+PE 132, FE 176, and `CustomCINEDataR1/R2/R3` roots. It remains useful for
+reproducing that baseline, but it is not the active variable-shape 10-case
+benchmark. Start at [`../README.md`](../README.md) for the full document map.
 
 Use these files as the first stop for code navigation and project-specific
 details:
@@ -14,5 +16,6 @@ details:
 | [inference-workflow.md](inference-workflow.md) | Debug and production inference workflow for R1/R2/R3 custom CINE experiments. |
 | [evaluation-metrics.md](evaluation-metrics.md) | Output inspection, GT alignment, metrics, and comparison plotting. |
 
-`AGENTS.md` remains the authoritative agent runbook. `FYI.md` remains the
-human-readable project log and detail record.
+`AGENTS.md` remains the authoritative agent operating guide. The active 10-case
+benchmark procedure is `docs/NV-Raw2insights-MRI_SOP.md`; dated and superseded
+material is indexed under `docs/history/`.

@@ -47,7 +47,12 @@ The reader loads these `.mat` files according to the schema in `scripts/readers.
 
 The repository includes an `example` folder with a sample JSON so you can run a quick test. See `scripts/readers.py` and `scripts/mri_data/data_utils.py` for the exact schema and how `.mat` files are loaded.
 
-## Custom CINE H5 and VISTA masks
+## Legacy five-case custom CINE H5 and VISTA masks
+
+This section reproduces the original Sub0001–Sub0005 baseline with PE 132,
+FE 176, and `CustomCINEDataR1/R2/R3` roots. For the active variable-shape,
+10-case benchmark, use the
+[`NV-Raw2insights-MRI_SOP.md`](NV-Raw2insights-MRI_SOP.md) instead.
 
 The custom CINE source H5 files use `(slice, coil, time, PE, FE)`, while the
 inference reader expects logical `(time, slice, coil, PE, FE)`. Use the bundled
@@ -209,7 +214,7 @@ Use `scripts/visualize_mat.py` to visualize `.mat` files produced by inference. 
 **Example** — after running inference as below, visualize all reconstructions in the output folder and save figures:
 
 ```bash
-# Run inferenc
+# Run inference
 python scripts/inference.py -c configs/nv_raw2insights_mri_base.json -i example -o outputs/example_output_base
 
 # Visualize all .mat files in the reconstruction folder and save PNGs

@@ -3,6 +3,10 @@
 This SOP records the benchmark workflow for the selected in-house CINE test
 subjects. Run server commands from the NV-Raw2insights-MRI repository root.
 
+This is the active variable-shape, FE=192, 10-case benchmark procedure. Do not
+substitute PE=132/FE=176 assumptions or `CustomCINEDataR1/R2/R3` paths from the
+legacy five-case baseline. See [`README.md`](README.md) for the document map.
+
 Fixed test subjects are recorded in:
 
 ```text

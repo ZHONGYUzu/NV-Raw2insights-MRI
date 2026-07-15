@@ -1,5 +1,9 @@
 # Daily Log: External Smap, Flexible Acceleration, And Optional ACS
 
+> Historical record. Commands and paths below describe the 132×176 CINE1
+> experiment generation and should not be mixed with the variable-shape,
+> FE=192 benchmark in `docs/NV-Raw2insights-MRI_SOP.md`.
+
 Date: 2026-06-23
 
 ## Context
@@ -294,7 +298,7 @@ scripts/models/restormer/restormer.py
 scripts/readers.py
 scripts/transforms.py
 scripts/validate_cine_inference_data.py
-docs/daily-log-2026-06-23-smap-acc-acs.md
+docs/history/2026-06-23-smap-acc-acs.md
 ```
 
 ## Remaining Cautions

@@ -36,15 +36,15 @@ conda activate nv-raw2insights-mri
 pip install --upgrade pip setuptools wheel
 ```
 
-### 3. Install dependencies
+### 4. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Optional: dataset preparation
+### 5. Optional: dataset preparation
 
-For training or inference on CMRxRecon-style data, place or symlink datasets as expected by the config (e.g. `dataset/CMRxRecon2025/ChallengeDataTrain`, `ChallengeDataValR1`). Use `scripts/create_cmrxrecon_dataset.py` if you need to build prepare dataset for `.mat` files. See [Training](training.md) for data preparation.
+For training or inference on CMRxRecon-style data, place or symlink datasets as expected by the config (e.g. `dataset/CMRxRecon2025/ChallengeDataTrain`, `ChallengeDataValR1`). Use `scripts/create_cmrxrecon_dataset.py` if you need to prepare a dataset from `.mat` files. See [Training](training.md) for data preparation.
 
 ## Downloading Checkpoints
 

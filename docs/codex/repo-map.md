@@ -1,8 +1,9 @@
-# Repo Map
+# Legacy Baseline Repo Map
 
-This repo works with CINE 2D MRI data for training, inference, conversion, and
-evaluation. The custom CINE workflow is server-oriented; local Codex work should
-prefer static inspection, focused code edits, and lightweight checks.
+This map is scoped to the original five-case 132×176 custom-CINE baseline. See
+[`../README.md`](../README.md) before applying these paths to another cohort.
+The workflow is server-oriented; local Codex work should prefer static
+inspection, focused code edits, and lightweight checks.
 
 ## Top-Level Docs
 
@@ -14,7 +15,9 @@ prefer static inspection, focused code edits, and lightweight checks.
 | `docs/setup.md` | General environment setup notes. |
 | `docs/inference.md` | General inference guide, including custom CINE snippets. |
 | `docs/training.md` | General training guide. |
+| `docs/README.md` | Documentation hierarchy and experiment-generation map. |
 | `docs/codex/` | Focused Codex/project-memory docs for custom CINE work. |
+| `docs/history/` | Dated logs and superseded analyses. |
 
 ## Main Configs
 

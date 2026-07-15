@@ -62,6 +62,7 @@ torchrun --nproc_per_node=8 scripts/inference.py \
 
 | Guide | Description |
 |-------|-------------|
+| [Documentation map](docs/README.md) | Guide hierarchy, experiment scopes, and historical records |
 | [Setup](docs/setup.md) | Full installation guide |
 | [Inference](docs/inference.md) | Inference options, configs, multi-GPU |
 | [Training](docs/training.md) | Training and fine-tuning guide |

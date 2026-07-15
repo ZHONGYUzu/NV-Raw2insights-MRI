@@ -1,5 +1,10 @@
 # Daily Log: H5 `dMap`, No-ACS acc8 Inference
 
+> Completed experiment record for the 10-subject external-`dMap`, no-forced-ACS
+> acc8 run. This is evidence that external sensitivity-map input is supported;
+> its `dataset/h5_converted` paths are experiment-specific and are not the
+> active `CINE_test_acc*` benchmark paths.
+
 Run date: 2026-07-14 to 2026-07-15  
 Transcript timestamp at model load: 2026-07-14 22:01:06  
 Status: completed successfully

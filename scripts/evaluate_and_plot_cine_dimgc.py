@@ -177,11 +177,13 @@ def frame_metrics(pred_frame: np.ndarray, gt_frame: np.ndarray) -> Dict[str, flo
     squared_error = float(np.sum(diff**2))
     gt_squared = float(np.sum(gt_frame.astype(np.float32) ** 2))
     mse = float(np.mean(diff**2))
+    mae = float(np.mean(np.abs(diff)))
     nrmse = float(np.sqrt(squared_error) / np.sqrt(gt_squared)) if gt_squared > 0 else float("nan")
+    nmse = float(squared_error / gt_squared) if gt_squared > 0 else float("nan")
     data_range = float(gt_frame.max() - gt_frame.min())
     psnr = float("nan") if mse <= 0 or data_range <= 0 else float(20.0 * np.log10(data_range / np.sqrt(mse)))
     ssim = float("nan") if data_range <= 0 else float(ssim_fn(gt_frame, pred_frame, data_range=data_range))
-    return {"nrmse": nrmse, "psnr": psnr, "ssim": ssim}
+    return {"nrmse": nrmse, "nmse": nmse, "psnr": psnr, "ssim": ssim, "mse": mse, "mae": mae}
 
 
 def collect_cases(acc_inputs: Sequence[Tuple[str, Path]], selected_cases: Optional[Sequence[str]], case_glob: str) -> List[str]:
@@ -226,6 +228,9 @@ def save_recon_error_plot(
     slice_index: int,
     time_index: int,
     percentile: float,
+    dpi: int,
+    vmax: Optional[float] = None,
+    error_vmax: Optional[float] = None,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -241,8 +246,10 @@ def save_recon_error_plot(
             ]
         )
         error_frames.append(np.abs(pred[:, :, slice_index, time_index] - gt[:, :, slice_index, time_index]))
-    vmax = image_vmax(display_frames, percentile)
-    error_vmax = image_vmax(error_frames, percentile)
+    if vmax is None:
+        vmax = image_vmax(display_frames, percentile)
+    if error_vmax is None:
+        error_vmax = image_vmax(error_frames, percentile)
 
     fig, axes = plt.subplots(4, len(labels), figsize=(4.0 * len(labels), 12.0), squeeze=False)
     for col, label in enumerate(labels):
@@ -250,9 +257,9 @@ def save_recon_error_plot(
         error = np.abs(pred[:, :, slice_index, time_index] - gt[:, :, slice_index, time_index])
         panels = [
             ("Input", input_image[:, :, slice_index, time_index], "gray", vmax),
-            ("GT dImgC", gt[:, :, slice_index, time_index], "gray", vmax),
-            ("Recon", pred[:, :, slice_index, time_index], "gray", vmax),
-            ("Abs error", error, "magma", error_vmax),
+            ("Target (dImgC)", gt[:, :, slice_index, time_index], "gray", vmax),
+            ("Reconstruction", pred[:, :, slice_index, time_index], "gray", vmax),
+            ("Absolute error", error, "magma", error_vmax),
         ]
         axes[0, col].set_title(label)
         for row, (row_label, image, cmap, panel_vmax) in enumerate(panels):
@@ -276,8 +283,124 @@ def save_recon_error_plot(
     fig.suptitle(f"{case_id}: slice={slice_index}, time={time_index}")
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
+
+
+def selected_frame_panels(
+    arrays: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    slice_index: int,
+    time_index: int,
+) -> List[Tuple[str, str, np.ndarray, str]]:
+    input_image, gt, pred = arrays
+    input_frame = input_image[:, :, slice_index, time_index]
+    target_frame = gt[:, :, slice_index, time_index]
+    reconstruction_frame = pred[:, :, slice_index, time_index]
+    error_frame = np.abs(reconstruction_frame - target_frame)
+    return [
+        ("input", "Input", input_frame, "gray"),
+        ("target", "Target (dImgC)", target_frame, "gray"),
+        ("reconstruction", "Reconstruction", reconstruction_frame, "gray"),
+        ("error_map", "Absolute error", error_frame, "magma"),
+    ]
+
+
+def shared_frame_limits(
+    arrays_by_label: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]],
+    slice_index: int,
+    time_index: int,
+    percentile: float,
+) -> Tuple[Optional[float], Optional[float]]:
+    display_frames = []
+    error_frames = []
+    for arrays in arrays_by_label.values():
+        panels = selected_frame_panels(arrays, slice_index, time_index)
+        display_frames.extend(panel[2] for panel in panels[:3])
+        error_frames.append(panels[3][2])
+    return image_vmax(display_frames, percentile), image_vmax(error_frames, percentile)
+
+
+def save_individual_panel(
+    image: np.ndarray,
+    output_path: Path,
+    title: str,
+    cmap: str,
+    vmax: Optional[float],
+    dpi: int,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, axis = plt.subplots(figsize=(4.5, 4.2))
+    displayed = axis.imshow(np.abs(image).T, cmap=cmap, origin="lower", vmin=0, vmax=vmax)
+    axis.set_title(title)
+    axis.axis("off")
+    fig.colorbar(displayed, ax=axis, fraction=0.046, pad=0.04)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_case_frame_outputs(
+    case_id: str,
+    arrays_by_label: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]],
+    output_dir: Path,
+    slice_index: int,
+    time_index: int,
+    percentile: float,
+    dpi: int,
+    combine_accelerations: bool,
+) -> List[Path]:
+    saved_paths: List[Path] = []
+    frame_dir = output_dir / "plots" / case_id / f"slice{slice_index:02d}_time{time_index:02d}"
+    vmax, error_vmax = shared_frame_limits(arrays_by_label, slice_index, time_index, percentile)
+
+    for label, arrays in arrays_by_label.items():
+        label_dir = frame_dir / label
+        for slug, panel_title, image, cmap in selected_frame_panels(arrays, slice_index, time_index):
+            panel_path = label_dir / f"{slug}.png"
+            panel_vmax = error_vmax if slug == "error_map" else vmax
+            save_individual_panel(
+                image,
+                panel_path,
+                f"{case_id} {label} — {panel_title}",
+                cmap,
+                panel_vmax,
+                dpi,
+            )
+            saved_paths.append(panel_path)
+
+        four_rows_path = label_dir / "four_rows.png"
+        save_recon_error_plot(
+            case_id,
+            {label: arrays},
+            four_rows_path,
+            slice_index,
+            time_index,
+            percentile,
+            dpi,
+            vmax=vmax,
+            error_vmax=error_vmax,
+        )
+        saved_paths.append(four_rows_path)
+
+    if combine_accelerations:
+        labels = list(arrays_by_label)
+        combined_path = frame_dir / "combined" / f"{'_'.join(labels)}_four_rows.png"
+        save_recon_error_plot(
+            case_id,
+            arrays_by_label,
+            combined_path,
+            slice_index,
+            time_index,
+            percentile,
+            dpi,
+            vmax=vmax,
+            error_vmax=error_vmax,
+        )
+        saved_paths.append(combined_path)
+
+    return saved_paths
 
 
 def write_csv(rows: List[Dict[str, object]], path: Path) -> None:
@@ -321,6 +444,8 @@ def evaluate_and_plot_case(
     gt_key: str,
     normalize: str,
     percentile: float,
+    dpi: int,
+    combine_accelerations: bool,
     slice_index: Optional[int],
     time_index: Optional[int],
 ) -> List[Dict[str, object]]:
@@ -363,9 +488,18 @@ def evaluate_and_plot_case(
                 )
 
     selected_slice, selected_time = choose_indices(gt.shape, slice_index, time_index)
-    plot_path = output_dir / "plots" / f"{case_id}_slice{selected_slice:02d}_time{selected_time:02d}_input_gt_recon_error.png"
-    save_recon_error_plot(case_id, arrays_by_label, plot_path, selected_slice, selected_time, percentile)
-    print(f"{case_id}: saved {plot_path}")
+    saved_paths = save_case_frame_outputs(
+        case_id,
+        arrays_by_label,
+        output_dir,
+        selected_slice,
+        selected_time,
+        percentile,
+        dpi,
+        combine_accelerations,
+    )
+    for path in saved_paths:
+        print(f"{case_id}: saved {path}")
     return rows
 
 
@@ -403,13 +537,19 @@ def main() -> None:
         help="Apply the same per-volume normalization to input, dImgC GT, and recon before metrics/plotting: none, max, or p99.5.",
     )
     parser.add_argument("--percentile", type=float, default=99.5, help="Display percentile for the plot.")
+    parser.add_argument("--dpi", type=int, default=200, help="PNG resolution in dots per inch (default: 200).")
     parser.add_argument("--slice-index", type=int, default=None, help="Slice to visualize.")
     parser.add_argument("--time-index", type=int, default=None, help="Time frame to visualize.")
     parser.add_argument(
+        "--combine-accelerations",
+        action="store_true",
+        help="Also save one four-row figure with all supplied acceleration rates as columns.",
+    )
+    parser.add_argument(
         "--metrics",
         nargs="+",
-        default=["nrmse", "psnr", "ssim"],
-        choices=["nrmse", "psnr", "ssim"],
+        default=["nrmse", "nmse", "psnr", "ssim", "mse", "mae"],
+        choices=["nrmse", "nmse", "psnr", "ssim", "mse", "mae"],
         help="Metrics to summarize.",
     )
     args = parser.parse_args()
@@ -442,6 +582,8 @@ def main() -> None:
                 gt_key=args.gt_key,
                 normalize=args.normalize,
                 percentile=args.percentile,
+                dpi=args.dpi,
+                combine_accelerations=args.combine_accelerations,
                 slice_index=args.slice_index,
                 time_index=args.time_index,
             )

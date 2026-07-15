@@ -1,5 +1,9 @@
 # Daily Log: Scientific Agent Skills Setup
 
+> Historical environment/setup record. Skill availability can change, so the
+> installed-skill list below is evidence for 2026-07-02, not a current runtime
+> inventory.
+
 Date: 2026-07-02
 
 ## Context

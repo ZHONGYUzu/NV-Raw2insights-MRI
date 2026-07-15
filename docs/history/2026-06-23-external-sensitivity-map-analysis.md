@@ -1,4 +1,12 @@
-# Task 2 Report: External Sensitivity Map Support
+# Historical Analysis: External Sensitivity Map Support
+
+> Status: superseded by the implementation completed after this analysis. The
+> current inference reader accepts `sensitivity_maps`, `smap`, or `dMap` from a
+> case descriptor; the transform pipeline prepares the maps; and
+> `scripts/inference.py` passes them to the model. See
+> [`2026-07-14-h5-dmap-noacs-acc8-inference.md`](2026-07-14-h5-dmap-noacs-acc8-inference.md)
+> for a completed 10-case server run. The remainder of this file is retained as
+> a dated record of the pre-implementation code review.
 
 Date: 2026-06-23
 

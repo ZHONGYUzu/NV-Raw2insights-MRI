@@ -2,7 +2,11 @@
 
 Report date: 2026-07-12
 
-Source SOP: `docs/NV-Raw2insights-MRI_SOP.md`
+Source SOP: [`NV-Raw2insights-MRI_SOP.md`](NV-Raw2insights-MRI_SOP.md)
+
+Documentation scope: this report covers the active variable-PE, FE=192,
+10-subject benchmark. It does not replace the historical 132×176
+`CustomCINEDataR1/R2/R3` baseline records.
 
 ## 1. Benchmark Objective
 

@@ -99,7 +99,10 @@ Training uses **Weights & Biases** for experiment tracking when enabled. Options
 
 ### Disable W&B
 
-If the code supports a “disabled” mode (e.g. a config flag or environment variable), set it so that training does not attempt to log to W&B. For example, some setups respect `WANDB_MODE=disabled` or a config option like `job.wandb_mode=disabled`. Check `scripts/train.py` and your config for the exact knob.
+The current training entry point calls `wandb.init()` on rank 0. To disable
+network logging without changing code, set `WANDB_MODE=disabled` before
+training. The `enable_onelogger` config field does not currently gate this
+`wandb.init()` call.
 
 ## Running training
 
@@ -112,7 +115,7 @@ From the repository root:
 NUM_GPUS_PER_NODE=8
 # Set the number of nodes
 NUM_NODES=1
-torchrun --nproc_per_node=$NUM_GPUS_PER_NODE --nnodes=$NUM_NODES cripts/train.py --config configs/nv_raw2insights_mri_base.json
+torchrun --nproc_per_node=$NUM_GPUS_PER_NODE --nnodes=$NUM_NODES scripts/train.py --config configs/nv_raw2insights_mri_base.json
 ```
 
 - `--config`: Path to the training config JSON (e.g. `nv_raw2insights_mri_base`, `nv_raw2insights_mri_small`, `nv_raw2insights_mri_large`).

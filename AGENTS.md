@@ -4,6 +4,11 @@
 
 This repo works with CINE 2D MRI H5 data for model training, inference, or evaluation.
 
+Documentation scope: use `docs/README.md` to distinguish the active 10-case
+variable-shape benchmark from the retained five-case 132×176 baseline below.
+`docs/NV-Raw2insights-MRI_SOP.md` is the active benchmark procedure;
+date-stamped investigations and completed run records belong in `docs/history/`.
+
 ## Data Format Notes
 
 Known H5 example:
@@ -25,8 +30,8 @@ Dimension meaning:
 - `nSlice`: number of slices, example size `12`.
 - `nCha`: number of channels/coils. For `dImgC`, example size `1` because it is coil-combined. For `dMap` and `kSpace`, example size `15` after coil compression.
 - `nPha`: number of cardiac phases/time frames. For `dImgC` and `kSpace`, example size `25`. For `dMap`, example size `1` because maps are time-averaged.
-- `nPE`: phase-encoding dimension, always `132` for the documented data.
-- `nFE`: frequency-encoding/readout dimension, always `176` for the documented data.
+- `nPE`: phase-encoding dimension, `132` for the documented Sub0001 legacy example; other benchmark cases use different PE sizes.
+- `nFE`: frequency-encoding/readout dimension, `176` for the documented Sub0001 legacy example; the newer 10-case benchmark uses `192`.
 
 Important assumptions or cautions:
 
@@ -130,7 +135,7 @@ mask = np.repeat(mask[:, :, None], k.shape[-1], axis=2)            # (25, 132, 1
 }
 ```
 
-#### Authoritative End-to-End Custom Data Process
+#### Authoritative Legacy Five-Case Custom Data Process
 
 Run every command below from the NV-Raw2Insights-MRI repository root on the server. The server repository path is not yet documented, so first `cd` to the directory that contains `scripts/`, `configs/`, and this `AGENTS.md`.
 
@@ -158,9 +163,15 @@ Ground truth root:  /home/students/studxuzho1/dataset_v0/norm_img
 Example ground truth: /home/students/studxuzho1/dataset_v0/norm_img/norm_img_Sub0001.npy
 ```
 
-#### New Custom CINE Naming Policy
+#### Historical Short-Name Proposal (Not Active)
 
-For new custom CINE runs, prefer short experiment roots and keep details in notes, metadata, script headers, or adjacent documentation instead of encoding every detail in path names.
+This `cine1/cine2/cine3` proposal was not adopted by the established legacy
+datasets or the newer benchmark. Do not rename existing roots to these names.
+Use `CustomCINEDataR1/R2/R3` only when reproducing the legacy five-case run, and
+use the `CINE_test_acc*` roots defined by `docs/NV-Raw2insights-MRI_SOP.md` for
+the active benchmark.
+
+The historical proposal preferred short experiment roots and keeping details in notes, metadata, script headers, or adjacent documentation instead of encoding every detail in path names.
 
 Use:
 
@@ -174,7 +185,7 @@ output/cine2
 output/cine3
 ```
 
-Document what each run means near the command or script that creates it. For the current acceleration comparison plan:
+The proposed mapping was:
 
 | New run | Meaning | Dataset root | Output root |
 | --- | --- | --- | --- |
@@ -760,16 +771,16 @@ python scripts/inference.py ...
 
 ## Known Gotchas
 
-- The final two H5 dimensions are always PE `132`, then FE/readout `176` for the documented dataset.
+- The final two H5 dimensions are PE then FE/readout. They are `132` and `176` for the legacy Sub0001–Sub0005 baseline; inspect each case because the newer benchmark has variable PE and FE `192`.
 - Raw H5 data and source masks are read-only and must not be copied into or modified by this repository.
 - Mask filenames influence acceleration parsing in the current reader pipeline.
 - Fixed masks need a positive central ACS region when `use_acs_region=true`.
 - The custom CINE k-space and VISTA mask converters are available locally under `scripts/`, together with a pre-inference validator.
 
-## Current Research / Experiment Notes
+## Legacy Five-Case Research / Experiment Notes
 
-- Current goal: reconstruct custom CINE 2D MRI data with NV-Raw2Insights-MRI and evaluate it against normalized fully sampled ground truth.
-- Active config: `configs/nv_raw2insights_mri_base.json` for the confirmed five-case run.
+- Goal for this retained baseline: reconstruct five custom CINE 2D MRI cases and evaluate them against normalized fully sampled ground truth.
+- Config: `configs/nv_raw2insights_mri_base.json` for the confirmed five-case run.
 - Important checkpoint: automatically resolved base-model checkpoint unless explicitly overridden.
 - Expected output: one `.mat` reconstruction per case under `val_img4ranking/`.
 

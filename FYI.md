@@ -255,16 +255,27 @@ identical because of differences in coil-combination method, FFT centering,
 sensitivity-map normalization, phase handling, intensity normalization, or
 vendor/export preprocessing.
 
-Current decision:
+Decision recorded on 2026-06-23 for the legacy comparison workflow:
 
 - Use `kSpace+dMap` as the more explicit generated GT method.
 - Use `dImgC` as a sanity-check reference unless the source data owner documents
   `dImgC` as the official evaluation target.
 
-## 2026-06-23 ACS, Sensitivity Map, Undersampled K-Space, And Acceleration Notes
+The active 10-case benchmark intentionally uses max-normalized H5 `dImgC` as
+defined in `docs/NV-Raw2insights-MRI_SOP.md`; that is a separate experiment
+protocol, not a replacement of this historical comparison decision.
 
-These notes answer four implementation questions about the current inference
-pipeline.
+## Historical 2026-06-23 ACS, Sensitivity Map, Undersampled K-Space, And Acceleration Notes
+
+> Superseded code-state note: external sensitivity-map input described below as
+> missing was implemented later. Current inference reads `sensitivity_maps`,
+> `smap`, or `dMap`, prepares the tensor, and passes it to the model. A completed
+> 10-case external-`dMap` run is recorded in
+> `docs/history/2026-07-14-h5-dmap-noacs-acc8-inference.md`. The remainder of
+> this section is preserved to explain the pre-implementation reasoning.
+
+These notes answered four implementation questions about the inference pipeline
+as it existed on 2026-06-23.
 
 ### 1. What does the ACS region do?
 
@@ -647,7 +658,7 @@ conditioning labels from the configured `accelerations` list. With the default
 configs, an acceleration such as `6` is not found and becomes an out-of-config
 conditioning case.
 
-Current decision:
+Decision recorded on 2026-06-23 for the legacy pretrained-config workflow:
 
 - Treat only `8`, `16`, and `24` as confirmed supported rates for the current
   pretrained foundation-model inference path.
