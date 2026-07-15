@@ -94,6 +94,11 @@ def main() -> None:
         default="UnderSample_TaskR1",
         help="Target k-space subdirectory under MultiCoil/Cine.",
     )
+    parser.add_argument(
+        "--mask-subdir",
+        default="Mask_TaskR1",
+        help="Target mask subdirectory under MultiCoil/Cine.",
+    )
     parser.add_argument("--input-mask-dir", type=Path, required=True)
     parser.add_argument("--mask-glob", default="mask_VISTA_132x25_acc16_8.txt")
     parser.add_argument("--mask-type", default="ktRadial16")
@@ -120,7 +125,7 @@ def main() -> None:
         raise FileNotFoundError(f"No source k-space files matched {source_kspace_dir / args.case_glob}")
 
     target_kspace_dir = args.output_root / "MultiCoil" / "Cine" / args.target_kspace_subdir
-    target_mask_dir = args.output_root / "MultiCoil" / "Cine" / "Mask_TaskR1"
+    target_mask_dir = args.output_root / "MultiCoil" / "Cine" / args.mask_subdir
     target_json_dir = args.output_root / "json_input"
 
     for source_kspace in source_kspaces:

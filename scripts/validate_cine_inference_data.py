@@ -62,7 +62,7 @@ def logical_mask(values: dict, path: Path) -> np.ndarray:
     return (mask > 0).astype(np.float32)
 
 
-def validate_case(json_path: Path, require_acs_center: bool) -> str:
+def validate_case(json_path: Path, require_acs_center: bool, require_smap: bool = False) -> str:
     with json_path.open() as descriptor_file:
         descriptor = json.load(descriptor_file)
     kspace_path = Path(descriptor["kspace"])
@@ -81,6 +81,8 @@ def validate_case(json_path: Path, require_acs_center: bool) -> str:
 
     smap_descriptor = descriptor.get("sensitivity_maps") or descriptor.get("smap") or descriptor.get("dMap")
     smap_note = ""
+    if require_smap and not smap_descriptor:
+        raise ValueError(f"{json_path}: external sensitivity maps are required but not configured")
     if smap_descriptor:
         smap_path = Path(smap_descriptor[0] if isinstance(smap_descriptor, list) else smap_descriptor)
         if not smap_path.is_file():
@@ -130,6 +132,11 @@ def main() -> None:
         action="store_true",
         help="Do not require the mask center to be positive. Use with external smaps or --disable-acs-region.",
     )
+    parser.add_argument(
+        "--require-smap",
+        action="store_true",
+        help="Require every descriptor to provide a valid external sensitivity-map file.",
+    )
     args = parser.parse_args()
     descriptors = sorted(args.input_path.glob("*.json"))
     if not descriptors:
@@ -138,7 +145,9 @@ def main() -> None:
     failures = []
     for descriptor in descriptors:
         try:
-            print(f"OK: {validate_case(descriptor, require_acs_center=not args.skip_acs_check)}")
+            print(
+                f"OK: {validate_case(descriptor, require_acs_center=not args.skip_acs_check, require_smap=args.require_smap)}"
+            )
         except Exception as error:
             failures.append((descriptor, error))
             print(f"ERROR: {descriptor.name}: {error}")

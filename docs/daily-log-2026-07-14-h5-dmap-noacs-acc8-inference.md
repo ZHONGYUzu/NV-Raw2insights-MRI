@@ -61,6 +61,38 @@ Input cases before filtering: 10
 Input cases after filtering: 10
 ```
 
+### Input And Output Paths
+
+Source inputs, which remain read-only:
+
+```text
+H5 source root: /mnt/qdata/rawdata/CINE/2D_h5_compressed
+H5 case pattern: /mnt/qdata/rawdata/CINE/2D_h5_compressed/<case>.h5
+H5 k-space key: kSpace
+H5 sensitivity-map key: dMap
+VISTA source root: /home/students/studxusiy1/mr_recon/masks
+VISTA mask pattern: mask_VISTA_<PE>x25_acc8_8.txt
+```
+
+Converted inference inputs under the server repository:
+
+```text
+Dataset root: /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/h5_converted
+K-space: /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/h5_converted/MultiCoil/Cine/h5_kspace/<case>_kspace_full.mat
+Sensitivity maps: /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/h5_converted/MultiCoil/Cine/h5_dmap/<case>_sensitivity_maps.mat
+Masks: /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/h5_converted/MultiCoil/Cine/Mask_TaskR1/<case>_mask_ktRadial8.mat
+Descriptors: /home/students/studxuzho1/NV-Raw2insights-MRI/dataset/h5_converted/json_input/<case>.json
+```
+
+Inference outputs:
+
+```text
+Output root: /home/students/studxuzho1/NV-Raw2insights-MRI/output/h5_converted
+Saved config: /home/students/studxuzho1/NV-Raw2insights-MRI/output/h5_converted/config.json
+Reconstructions: /home/students/studxuzho1/NV-Raw2insights-MRI/output/h5_converted/val_img4ranking/<case>.mat
+MAT reconstruction key: img4ranking
+```
+
 Fixed cases from `docs/test_subjects.txt`:
 
 ```text
