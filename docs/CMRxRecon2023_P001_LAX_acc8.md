@@ -112,3 +112,36 @@ logs/cmrx23_p001_lax_a8_<job-id>.err
 Inference skips an existing reconstruction. To repeat model inference from
 scratch without deleting a prior result, change `OUTPUT_ROOT` in a copied job
 script or move to a new, clearly named output root.
+
+## Evaluate Against Full-Sampled RSS
+
+After inference succeeds, submit the CPU-only evaluation job:
+
+```bash
+mkdir -p logs
+sbatch scripts/slurm/evaluate_cmrxrecon2023_p001_lax_acc8.sbatch
+```
+
+It derives the reference by applying a centered orthonormal 2D inverse FFT to
+`kspace_full`, combining its ten coil images with root-sum-of-squares, and
+matching the prediction layout. Direct-scale PSNR, SSIM, NRMSE, NMSE, MSE, and
+MAE are computed for all 36 slice/time frames. A global least-squares scale-fit
+is included only as a diagnostic and is not the primary result.
+
+Evaluation outputs remain beside the model result:
+
+```text
+output/CMRxRecon2023CINELAXAcc8/evaluation/
+  P001_cine_lax_fullsample_rss.mat
+  frame_metrics.csv
+  summary_metrics.json
+  frame_metrics_boxplot.png
+  comparison.png
+```
+
+The evaluation log is written to:
+
+```text
+logs/eval_cmrx23_p001_a8_<job-id>.out
+logs/eval_cmrx23_p001_a8_<job-id>.err
+```

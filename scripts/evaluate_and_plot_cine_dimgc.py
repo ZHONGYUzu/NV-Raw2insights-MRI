@@ -484,6 +484,7 @@ def evaluate_and_plot_case(
     combine_accelerations: bool,
     slice_index: Optional[int],
     time_index: Optional[int],
+    generate_case_plots: bool,
 ) -> List[Dict[str, object]]:
     gt = normalize_volume(load_dimgc_gt(h5_root, case_id, gt_key), normalize)
     rows: List[Dict[str, object]] = []
@@ -499,14 +500,15 @@ def evaluate_and_plot_case(
         if not json_path.is_file():
             raise FileNotFoundError(f"{label} {case_id}: missing descriptor {json_path}")
 
-        input_image = normalize_volume(load_zero_filled_input(json_path), normalize)
         pred = normalize_volume(load_prediction(pred_path, key), normalize)
         if pred.shape != gt.shape:
             raise ValueError(f"{label} {case_id}: pred shape {pred.shape} != dImgC GT shape {gt.shape}")
-        if input_image.shape != gt.shape:
-            raise ValueError(f"{label} {case_id}: input shape {input_image.shape} != dImgC GT shape {gt.shape}")
 
-        arrays_by_label[label] = (input_image, gt, pred)
+        if generate_case_plots:
+            input_image = normalize_volume(load_zero_filled_input(json_path), normalize)
+            if input_image.shape != gt.shape:
+                raise ValueError(f"{label} {case_id}: input shape {input_image.shape} != dImgC GT shape {gt.shape}")
+            arrays_by_label[label] = (input_image, gt, pred)
         _, _, num_slices, num_times = pred.shape
         for frame_slice in range(num_slices):
             for frame_time in range(num_times):
@@ -523,19 +525,20 @@ def evaluate_and_plot_case(
                     }
                 )
 
-    selected_slice, selected_time = choose_indices(gt.shape, slice_index, time_index)
-    saved_paths = save_case_frame_outputs(
-        case_id,
-        arrays_by_label,
-        output_dir,
-        selected_slice,
-        selected_time,
-        percentile,
-        dpi,
-        combine_accelerations,
-    )
-    for path in saved_paths:
-        print(f"{case_id}: saved {path}")
+    if generate_case_plots:
+        selected_slice, selected_time = choose_indices(gt.shape, slice_index, time_index)
+        saved_paths = save_case_frame_outputs(
+            case_id,
+            arrays_by_label,
+            output_dir,
+            selected_slice,
+            selected_time,
+            percentile,
+            dpi,
+            combine_accelerations,
+        )
+        for path in saved_paths:
+            print(f"{case_id}: saved {path}")
     return rows
 
 
@@ -563,6 +566,16 @@ def main() -> None:
     )
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("output/cine_dimgc_eval"))
     parser.add_argument("--case", action="append", dest="cases", help="Case id to process, for example Sub0001.")
+    parser.add_argument(
+        "--plot-case",
+        action="append",
+        dest="plot_cases",
+        help=(
+            "Case id for which to save the full input/target/reconstruction/error PNG set. "
+            "Repeat as needed. By default, plots are saved for every evaluated case. "
+            "All evaluated cases always remain in the CSV files and metric distribution plots."
+        ),
+    )
     parser.add_argument("--case-glob", default="Sub*.mat", help="Prediction case glob used in every acc directory.")
     parser.add_argument("--max-cases", type=int, default=None, help="Optional limit after sorting shared cases.")
     parser.add_argument("--key", default="img4ranking", help="MAT key containing the reconstruction.")
@@ -609,6 +622,13 @@ def main() -> None:
         cases = cases[: args.max_cases]
     if not cases:
         parser.error("No shared cases found across acceleration directories")
+    plot_cases = set(cases if args.plot_cases is None else args.plot_cases)
+    unknown_plot_cases = sorted(plot_cases - set(cases))
+    if unknown_plot_cases:
+        parser.error(
+            "--plot-case values must also be evaluated cases: "
+            + ", ".join(unknown_plot_cases)
+        )
 
     rows: List[Dict[str, object]] = []
     for case_id in cases:
@@ -627,6 +647,7 @@ def main() -> None:
                 combine_accelerations=args.combine_accelerations,
                 slice_index=args.slice_index,
                 time_index=args.time_index,
+                generate_case_plots=case_id in plot_cases,
             )
         )
 
@@ -640,6 +661,7 @@ def main() -> None:
         save_distribution_plot(rows, args.metrics, boxplot_path, kind="box", dpi=args.dpi)
         save_distribution_plot(rows, args.metrics, violin_path, kind="violin", dpi=args.dpi)
     print(f"Evaluated cases: {', '.join(cases)}")
+    print(f"Cases with full image plots: {', '.join(case for case in cases if case in plot_cases)}")
     print(f"Total frame rows: {len(rows)}")
     print(f"Saved frame metrics: {frame_csv}")
     print(f"Saved summary metrics: {summary_csv}")
