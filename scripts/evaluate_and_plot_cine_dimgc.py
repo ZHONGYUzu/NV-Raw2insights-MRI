@@ -177,13 +177,11 @@ def frame_metrics(pred_frame: np.ndarray, gt_frame: np.ndarray) -> Dict[str, flo
     squared_error = float(np.sum(diff**2))
     gt_squared = float(np.sum(gt_frame.astype(np.float32) ** 2))
     mse = float(np.mean(diff**2))
-    mae = float(np.mean(np.abs(diff)))
     nrmse = float(np.sqrt(squared_error) / np.sqrt(gt_squared)) if gt_squared > 0 else float("nan")
-    nmse = float(squared_error / gt_squared) if gt_squared > 0 else float("nan")
     data_range = float(gt_frame.max() - gt_frame.min())
     psnr = float("nan") if mse <= 0 or data_range <= 0 else float(20.0 * np.log10(data_range / np.sqrt(mse)))
     ssim = float("nan") if data_range <= 0 else float(ssim_fn(gt_frame, pred_frame, data_range=data_range))
-    return {"nrmse": nrmse, "nmse": nmse, "psnr": psnr, "ssim": ssim, "mse": mse, "mae": mae}
+    return {"nrmse": nrmse, "psnr": psnr, "ssim": ssim}
 
 
 def collect_cases(acc_inputs: Sequence[Tuple[str, Path]], selected_cases: Optional[Sequence[str]], case_glob: str) -> List[str]:
@@ -434,6 +432,44 @@ def summarize_rows(rows: List[Dict[str, object]], metrics: Sequence[str]) -> Lis
     return summary
 
 
+def metric_values_by_label(rows: List[Dict[str, object]], labels: Sequence[str], metric: str) -> List[np.ndarray]:
+    values_by_label = []
+    for label in labels:
+        values = np.array(
+            [float(row[metric]) for row in rows if row["acceleration"] == label],
+            dtype=np.float64,
+        )
+        values_by_label.append(values[np.isfinite(values)])
+    return values_by_label
+
+
+def save_distribution_plot(
+    rows: List[Dict[str, object]],
+    metrics: Sequence[str],
+    output_path: Path,
+    kind: str,
+    dpi: int,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    labels = sorted({str(row["acceleration"]) for row in rows})
+    fig, axes = plt.subplots(1, len(metrics), figsize=(4.5 * len(metrics), 4.5), squeeze=False)
+    for axis, metric in zip(axes[0], metrics):
+        values = metric_values_by_label(rows, labels, metric)
+        if kind == "violin":
+            axis.violinplot(values, showmeans=True, showmedians=True)
+        else:
+            axis.boxplot(values, showmeans=True, showfliers=False)
+        axis.set_title(metric.upper())
+        axis.set_xticks(range(1, len(labels) + 1))
+        axis.set_xticklabels(labels)
+        axis.grid(axis="y", alpha=0.25)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+
 def evaluate_and_plot_case(
     case_id: str,
     acc_inputs: Sequence[Tuple[str, Path]],
@@ -546,10 +582,15 @@ def main() -> None:
         help="Also save one four-row figure with all supplied acceleration rates as columns.",
     )
     parser.add_argument(
+        "--skip-metric-plots",
+        action="store_true",
+        help="Only write CSV files and reconstruction plots; do not generate metric box/violin plots.",
+    )
+    parser.add_argument(
         "--metrics",
         nargs="+",
-        default=["nrmse", "nmse", "psnr", "ssim", "mse", "mae"],
-        choices=["nrmse", "nmse", "psnr", "ssim", "mse", "mae"],
+        default=["nrmse", "psnr", "ssim"],
+        choices=["nrmse", "psnr", "ssim"],
         help="Metrics to summarize.",
     )
     args = parser.parse_args()
@@ -591,12 +632,20 @@ def main() -> None:
 
     frame_csv = args.output_dir / "frame_metrics.csv"
     summary_csv = args.output_dir / "summary_metrics.csv"
+    boxplot_path = args.output_dir / "metrics_boxplot.png"
+    violin_path = args.output_dir / "metrics_violin.png"
     write_csv(rows, frame_csv)
     write_csv(summarize_rows(rows, args.metrics), summary_csv)
+    if not args.skip_metric_plots:
+        save_distribution_plot(rows, args.metrics, boxplot_path, kind="box", dpi=args.dpi)
+        save_distribution_plot(rows, args.metrics, violin_path, kind="violin", dpi=args.dpi)
     print(f"Evaluated cases: {', '.join(cases)}")
     print(f"Total frame rows: {len(rows)}")
     print(f"Saved frame metrics: {frame_csv}")
     print(f"Saved summary metrics: {summary_csv}")
+    if not args.skip_metric_plots:
+        print(f"Saved box plot: {boxplot_path}")
+        print(f"Saved violin plot: {violin_path}")
 
 
 if __name__ == "__main__":
