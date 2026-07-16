@@ -21,7 +21,7 @@ INPUT_JSON=$DATASET_ROOT/json_input
 MANIFEST=$DATASET_ROOT/cohort_manifest.json
 OUTPUT_ROOT=output/CMRxRecon2023CINELAX10Acc8Official
 PREDICTION_DIR=$OUTPUT_ROOT/val_img4ranking
-RESULTS_ROOT=ResultsCMRxRecon2023CINELAX10Acc8Official
+RESULTS_ROOT=Results/CMRxRecon2023CINELAX10Acc8Official
 
 finish () {
   status=$?
