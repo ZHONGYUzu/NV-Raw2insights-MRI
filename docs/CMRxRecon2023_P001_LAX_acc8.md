@@ -145,3 +145,66 @@ The evaluation log is written to:
 logs/eval_cmrx23_p001_a8_<job-id>.out
 logs/eval_cmrx23_p001_a8_<job-id>.err
 ```
+
+## Reproducible Ten-Case LAX Cohort
+
+The complete official-mask ten-case workflow is packaged as:
+
+```text
+scripts/slurm/run_cmrxrecon2023_lax10_acc8_official.sbatch
+```
+
+Before submission, create the log directory from the repository root:
+
+```bash
+mkdir -p logs
+sbatch scripts/slurm/run_cmrxrecon2023_lax10_acc8_official.sbatch
+```
+
+The job uses random seed `20260716`, selects ten paired LAX subjects, preserves
+their official acceleration-8 masks without adding ACS lines, validates the
+derived descriptors, runs inference, and evaluates every reconstructed frame
+against full-sampled RSS. The cohort manifest is the authoritative record of
+the subjects selected on the server.
+
+Its three generated roots are:
+
+```text
+dataset/CMRxRecon2023CINELAX10Acc8Official/
+output/CMRxRecon2023CINELAX10Acc8Official/
+ResultsCMRxRecon2023CINELAX10Acc8Official/
+```
+
+After all ten inference MAT files exist, the batch evaluation can also be run
+directly without submitting another SLURM job:
+
+```bash
+cd /home/students/studxuzho1/NV-Raw2insights-MRI
+conda activate nv-raw2insights-mri
+
+python scripts/evaluate_cmrxrecon2023_cohort.py \
+  --manifest dataset/CMRxRecon2023CINELAX10Acc8Official/cohort_manifest.json \
+  --prediction-dir output/CMRxRecon2023CINELAX10Acc8Official/val_img4ranking \
+  --output-dir /home/students/studxuzho1/NV-Raw2insights-MRI/ResultsCMRxRecon2023CINELAX10Acc8Official
+```
+
+The evaluator requires every manifest case to have a matching prediction. It
+automatically uses the middle slice and middle time frame of each case for its
+comparison PNG, while quantitative metrics include every slice and time frame.
+
+The result root contains:
+
+```text
+ResultsCMRxRecon2023CINELAX10Acc8Official/
+  ground_truth/
+    <case_id>_fullsample_rss.mat
+  comparisons/
+    <case_id>.png
+  frame_metrics.csv
+  summary_metrics.json
+  frame_metrics_boxplot.png
+```
+
+`summary_metrics.json` contains both per-case results and the aggregate
+frame-level summary for the complete cohort. Direct-scale metrics are primary;
+the fitted-scale values are retained only as diagnostics.
