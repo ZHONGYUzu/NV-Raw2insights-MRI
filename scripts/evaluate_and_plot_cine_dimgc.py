@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -49,6 +50,11 @@ def parse_label_path(value: str) -> Tuple[str, Path]:
     if not label:
         raise argparse.ArgumentTypeError("Label cannot be empty")
     return label, Path(path)
+
+
+def natural_sort_key(value: str) -> tuple:
+    """Sort labels containing numbers numerically, e.g. acc8 before acc16."""
+    return tuple(int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", value))
 
 
 def read_mat_values(path: Path) -> dict:
@@ -413,7 +419,7 @@ def write_csv(rows: List[Dict[str, object]], path: Path) -> None:
 
 def summarize_rows(rows: List[Dict[str, object]], metrics: Sequence[str]) -> List[Dict[str, object]]:
     summary = []
-    for label in sorted({str(row["acceleration"]) for row in rows}):
+    for label in sorted({str(row["acceleration"]) for row in rows}, key=natural_sort_key):
         label_rows = [row for row in rows if row["acceleration"] == label]
         item: Dict[str, object] = {
             "acceleration": label,
@@ -452,7 +458,7 @@ def save_distribution_plot(
 ) -> None:
     import matplotlib.pyplot as plt
 
-    labels = sorted({str(row["acceleration"]) for row in rows})
+    labels = sorted({str(row["acceleration"]) for row in rows}, key=natural_sort_key)
     fig, axes = plt.subplots(1, len(metrics), figsize=(4.5 * len(metrics), 4.5), squeeze=False)
     for axis, metric in zip(axes[0], metrics):
         values = metric_values_by_label(rows, labels, metric)

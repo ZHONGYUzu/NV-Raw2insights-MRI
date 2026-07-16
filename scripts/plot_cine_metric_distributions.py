@@ -5,10 +5,16 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from pathlib import Path
 from typing import Dict, List, Sequence
 
 import numpy as np
+
+
+def natural_sort_key(value: str) -> tuple:
+    """Sort labels containing numbers numerically, e.g. acc8 before acc16."""
+    return tuple(int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", value))
 
 
 def read_metric_rows(path: Path) -> List[Dict[str, str]]:
@@ -53,7 +59,7 @@ def save_distribution_plot(
 ) -> None:
     import matplotlib.pyplot as plt
 
-    labels = sorted({row[label_column] for row in rows})
+    labels = sorted({row[label_column] for row in rows}, key=natural_sort_key)
     fig, axes = plt.subplots(1, len(metrics), figsize=(4.5 * len(metrics), 4.5), squeeze=False)
     for axis, metric in zip(axes[0], metrics):
         values = metric_values_by_label(rows, labels, metric, label_column)
