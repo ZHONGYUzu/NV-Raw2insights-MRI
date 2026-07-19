@@ -67,6 +67,43 @@ torchrun --nproc_per_node=8 scripts/inference.py \
 | [Inference](docs/inference.md) | Inference options, configs, multi-GPU |
 | [Training](docs/training.md) | Training and fine-tuning guide |
 
+### Server-only data and hidden Git records
+
+Large datasets, generated reconstructions, evaluation results, logs, and the
+contents of `dataset/archiv/` and `output/archiv/` remain on the compute server
+and must not be committed to Git. A server checkout may hide these generated
+paths with `.git/info/exclude`; unlike `.gitignore`, that file applies only to
+the individual checkout and is neither committed nor synchronized to other
+clones.
+
+After server-side dataset reorganization, missing tracked `.gitkeep` files may
+also be marked `skip-worktree`. This keeps the server working tree clean without
+restoring the old placeholder directories or recording their deletion in a
+commit. These records are also local to that checkout.
+
+Inspect the server-only configuration from the repository root with:
+
+```bash
+# Exclusion rules for generated server paths
+cat "$(git rev-parse --git-path info/exclude)"
+
+# Tracked paths hidden with skip-worktree
+git ls-files -v | grep '^S'
+
+# Explain why a generated path is ignored
+git check-ignore -v <path>
+
+# Show ignored paths temporarily
+git status --short --ignored
+```
+
+The optional server-local explanation is stored at
+`.git/info/SERVER_HIDDEN_FILES.md` when created. Because anything under `.git/`
+is repository metadata, that note is not transferred by `git pull`, push,
+clone, or normal file synchronization. Do not manually create a `.git` folder
+if it is absent; use `git rev-parse --git-dir` to verify that the current
+directory is a Git checkout.
+
 ## Performance
 
 ### Model Scaling (PSNR vs cascade depth)
