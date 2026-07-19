@@ -13,6 +13,7 @@ intentionally separate.
 | Agent safety and project constraints | [`../AGENTS.md`](../AGENTS.md) | Operating rules and retained legacy-baseline runbook. |
 | General setup, inference, and training | [`setup.md`](setup.md), [`inference.md`](inference.md), [`training.md`](training.md) | General user guides. |
 | CMRxRecon 2023 one-case compatibility run | [`CMRxRecon2023_P001_LAX_acc8.md`](CMRxRecon2023_P001_LAX_acc8.md) | Native P001 LAX full-sampled k-space with the official nominal acc8 mask. |
+| fastMRI brain multi-coil inference | [`FastMRI_brain_inference.md`](FastMRI_brain_inference.md) | Native H5, reproducible AXT2 validation cohort, generated acc8 mask, and RSS evaluation. |
 | Active 10-case benchmark procedure | [`NV-Raw2insights-MRI_SOP.md`](NV-Raw2insights-MRI_SOP.md) | Variable PE, FE 192, `dImgC` GT, and `CINE_test_acc*` roots. |
 | Active benchmark status/results | [`CINE_benchmark_report.md`](CINE_benchmark_report.md) | Completed, pending, timing, and risk record for the SOP cohort. |
 | Legacy 5-case custom-CINE baseline | [`codex/README.md`](codex/README.md) | Fixed 132×176 cases using `CustomCINEDataR1/R2/R3`. |

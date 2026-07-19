@@ -104,6 +104,24 @@ class FastMRIReader(ImageReader):
     - patient_id (str): the patient's id whose measurements were recorded
     """
 
+    def __init__(self, uniform_input_kspace: tuple[int, int] | None = (384, 384)) -> None:
+        super().__init__()
+        self.uniform_input_kspace = uniform_input_kspace
+
+    @staticmethod
+    def center_pad_or_crop(array: np.ndarray, spatial_shape: tuple[int, int]) -> np.ndarray:
+        output = np.zeros((*array.shape[:-2], *spatial_shape), dtype=array.dtype)
+        source_slices = []
+        target_slices = []
+        for source_size, target_size in zip(array.shape[-2:], spatial_shape):
+            copied_size = min(source_size, target_size)
+            source_start = (source_size - copied_size) // 2
+            target_start = (target_size - copied_size) // 2
+            source_slices.append(slice(source_start, source_start + copied_size))
+            target_slices.append(slice(target_start, target_start + copied_size))
+        output[..., target_slices[0], target_slices[1]] = array[..., source_slices[0], source_slices[1]]
+        return output
+
     def verify_suffix(self, filename: Sequence[PathLike] | PathLike) -> bool:
         """
          Verify whether the specified file format is supported by h5py reader.
@@ -145,12 +163,11 @@ class FastMRIReader(ImageReader):
             dat: a dictionary loaded from an h5 file
         """
         header = self._get_meta_dict(dat)
-        data: ndarray = np.array(dat[FastMRIKeys.KSPACE])[np.newaxis, ...]
-        header[FastMRIKeys.MASK] = (
-            np.expand_dims(np.array(dat[FastMRIKeys.MASK]), 0)[None, ..., None]
-            if FastMRIKeys.MASK in dat.keys()
-            else np.zeros(data.shape)
-        )
+        kspace = np.asarray(dat[FastMRIKeys.KSPACE])
+        header["source_shape"] = np.asarray(kspace.shape)
+        if self.uniform_input_kspace is not None:
+            kspace = self.center_pad_or_crop(kspace, self.uniform_input_kspace)
+        data: ndarray = kspace[np.newaxis, ...]
         data_shape = data.shape
         header[CMRxReconKeys.NUM_FRAMES] = data_shape[0]
         header[CMRxReconKeys.NUM_SLICES] = data_shape[1]
@@ -158,7 +175,24 @@ class FastMRIReader(ImageReader):
         header[CMRxReconKeys.SHAPE] = np.array(data_shape)
         mask = np.ones([1] * data.ndim)
         header[CMRxReconKeys.MASK] = mask.astype(np.float32)
-        header[FastMRIKeys.ACQUISITION] = header[FastMRIKeys.ACQUISITION].replace("AXT1PRE", "AXT1")
+        acquisition = header[FastMRIKeys.ACQUISITION]
+        if isinstance(acquisition, (bytes, np.bytes_)):
+            acquisition = acquisition.decode()
+        acquisition = str(acquisition)
+        header["acquisition_raw"] = acquisition
+        acquisition_mapping = {
+            "AXT1": "T1w",
+            "AXT1PRE": "T1w",
+            "AXT1POST": "T1w",
+            "AXT2": "T2w",
+            "AXFLAIR": "T2w",
+        }
+        if acquisition not in acquisition_mapping:
+            raise ValueError(
+                f"Unsupported fastMRI acquisition {acquisition!r}; "
+                f"supported brain acquisitions are {sorted(acquisition_mapping)}"
+            )
+        header[FastMRIKeys.ACQUISITION] = acquisition_mapping[acquisition]
         return data, header
 
     def _get_meta_dict(self, dat: dict) -> dict:

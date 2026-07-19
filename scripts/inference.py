@@ -52,6 +52,14 @@ def parse_csv_values(value, cast=str):
     return [cast(item.strip()) for item in items if str(item).strip()]
 
 
+def inference_input_suffix(dataset: str) -> str:
+    return ".h5" if dataset.lower() == "fastmri" else ".json"
+
+
+def reconstruction_filename(input_name: str) -> str:
+    return f"{Path(input_name).stem}.mat"
+
+
 @record
 def infer(args):
     if args.ddp:
@@ -98,13 +106,14 @@ def infer(args):
     if args.ddp:
         dist.barrier()
 
-    test_files = [file for file in Path(args.data_path_test).iterdir() if str(file).endswith(".json")]
+    input_suffix = inference_input_suffix(args.dataset)
+    test_files = sorted(file for file in Path(args.data_path_test).iterdir() if file.suffix.lower() == input_suffix)
     print(f"#Total test files before filtering: {len(test_files)}")
     # filter out already processed files
     test_files = [
         f
         for f in test_files
-        if not (Path(args.output_path) / "val_img4ranking" / f.name.replace(".json", ".mat")).exists()
+        if not (Path(args.output_path) / "val_img4ranking" / reconstruction_filename(f.name)).exists()
     ]
     print(f"#Total test files after filtering: {len(test_files)}")
     test_files = [dict([("kspace", test_files[i])]) for i in range(len(test_files))]
@@ -330,7 +339,7 @@ def infer(args):
             save_img4ranking(
                 outputs_pp,
                 os.path.join(args.output_path, "val_img4ranking"),
-                file_name.replace(".json", ".mat"),
+                reconstruction_filename(file_name),
             )
             timings["save_mat"] = time.perf_counter() - stage_start
 

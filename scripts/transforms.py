@@ -769,6 +769,12 @@ class KspaceMaskd(RandomizableTransform, MapTransform):
                 else:
                     d[key + "_masked"], _, _, acc_factor = self.maskers[chosen_masker_idx](d[key])
                 mask_type = self.maskers[chosen_masker_idx].__class__.__name__
+                # The released model conditions on its trained "uniform" mask
+                # class. fastMRI equispaced masks are its 1D Cartesian analogue,
+                # so retain the correct last-axis sampling while using the
+                # checkpoint-compatible conditioning label.
+                if isinstance(self.maskers[chosen_masker_idx], EquispacedKspaceMask):
+                    mask_type = UniformKspaceMask.__name__
             else:
                 raise RuntimeError(
                     "Augmentation of no readout oversample simulation is not compatible with fixed mask type."

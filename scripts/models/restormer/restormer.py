@@ -1112,7 +1112,8 @@ class restormer_mri(nn.Module):
             )
         self.use_dc_weight_map = args.use_dc_weight_map
         if self.use_dc_weight_map:
-            dcwm_h, dcwm_w = (328, 806) if args.dataset.lower() == "cmrxrecon" else (768, 768)
+            definition_dataset = getattr(args, "dataset_for_def_model", args.dataset)
+            dcwm_h, dcwm_w = (328, 806) if definition_dataset.lower() == "cmrxrecon" else (768, 768)
             if self.mask_specific_dc_weight_map:
                 self.dc_weight_map = nn.Parameter(
                     torch.ones(len(self.mask_types), self.num_frames, 1, dcwm_h, dcwm_w, 1)
