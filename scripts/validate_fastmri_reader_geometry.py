@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import h5py
 import numpy as np
 from scipy.fft import fftshift, ifftn, ifftshift
 
@@ -18,13 +19,14 @@ def rss_from_kspace(kspace: np.ndarray) -> np.ndarray:
         ifftn(ifftshift(kspace, axes=spatial_axes), axes=spatial_axes, norm="ortho"),
         axes=spatial_axes,
     )
-    return np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=2))[0]
+    return np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=-3))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input_dir", type=Path)
     parser.add_argument("--max-cases", type=int, default=1)
+    parser.add_argument("--slice-index", type=int, help="Slice to check; default is the middle slice.")
     parser.add_argument("--nmse-threshold", type=float, default=1e-6)
     args = parser.parse_args()
 
@@ -34,22 +36,30 @@ def main() -> None:
     if not paths:
         parser.error(f"No H5 files found under {args.input_dir}")
 
-    reader = FastMRIReader()
     failures = []
     for path in paths:
-        raw = reader.read(path)
-        processed_kspace, metadata = reader.get_data(raw)
+        with h5py.File(path, "r") as h5_file:
+            kspace_dataset = h5_file[FastMRIKeys.KSPACE.value]
+            target_dataset = h5_file[FastMRIKeys.RECON.value]
+            num_slices = int(kspace_dataset.shape[0])
+            slice_index = num_slices // 2 if args.slice_index is None else args.slice_index
+            if not 0 <= slice_index < num_slices:
+                raise IndexError(f"{path.name}: slice {slice_index} is outside [0, {num_slices})")
+            source_shape = tuple(int(size) for size in kspace_dataset.shape)
+            source_kspace = np.asarray(kspace_dataset[slice_index])
+            target = np.asarray(target_dataset[slice_index], dtype=np.float32)
+
+        processed_kspace = FastMRIReader.crop_kspace_via_image_domain(source_kspace, target.shape[-2:])
         reconstruction = rss_from_kspace(processed_kspace)
-        target = np.asarray(raw[FastMRIKeys.RECON], dtype=np.float32)
         if reconstruction.shape != target.shape:
             raise ValueError(f"{path.name}: RSS {reconstruction.shape} != target {target.shape}")
         difference = reconstruction.astype(np.float64) - target.astype(np.float64)
         nmse = float(np.sum(difference**2) / max(np.sum(target.astype(np.float64) ** 2), 1e-12))
         max_abs_error = float(np.max(np.abs(difference)))
-        source_shape = tuple(int(size) for size in metadata["source_shape"])
         processed_shape = tuple(int(size) for size in processed_kspace.shape)
         print(
-            f"{path.name}: source={source_shape}, processed={processed_shape}, "
+            f"{path.name}: slice={slice_index}/{num_slices - 1}, source={source_shape}, "
+            f"processed_slice={processed_shape}, "
             f"target={target.shape}, zero_filled_nmse={nmse:.3e}, max_abs_error={max_abs_error:.3e}"
         )
         if not np.isfinite(nmse) or nmse > args.nmse_threshold:

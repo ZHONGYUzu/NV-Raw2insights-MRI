@@ -60,8 +60,10 @@ python scripts/validate_fastmri_reader_geometry.py \
   --max-cases 1
 ```
 
-The processed k-space must have spatial shape 320×320 and the reported
-zero-filled NMSE against `reconstruction_rss` must be at most `1e-6`.
+The validator reads only the middle slice rather than loading and Fourier
+transforming the approximately 500 MB volume. The processed slice k-space must
+have spatial shape 320×320 and the reported zero-filled NMSE against
+`reconstruction_rss` must be at most `1e-6`.
 
 ## Generated Paths
 
