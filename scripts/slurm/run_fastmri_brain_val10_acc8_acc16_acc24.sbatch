@@ -64,12 +64,16 @@ nvidia-smi
   "$INPUT_H5" \
   --manifest "$MANIFEST"
 
+"$PYTHON_BIN" scripts/validate_fastmri_reader_geometry.py \
+  "$INPUT_H5" \
+  --max-cases 1
+
 expected_cases=$("$PYTHON_BIN" -c 'import json,sys; print(json.load(open(sys.argv[1]))["num_selected_cases"])' "$MANIFEST")
 
 for acc in 8 16 24; do
-  output_root="output/FastMRIBrainMulticoilVal10Acc${acc}"
+  output_root="output/FastMRIBrainMulticoilVal10GeomFixAcc${acc}"
   prediction_dir="$output_root/val_img4ranking"
-  results_root="Results/FastMRIBrainMulticoilVal10Acc${acc}"
+  results_root="Results/FastMRIBrainMulticoilVal10GeomFixAcc${acc}"
 
   echo "========== Starting nominal acceleration ${acc} =========="
   echo "Predictions: $prediction_dir"

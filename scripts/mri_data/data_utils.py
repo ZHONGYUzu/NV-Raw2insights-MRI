@@ -414,8 +414,9 @@ def circular_shift_in_kspace(kspace: torch.Tensor, shift: tuple) -> torch.Tensor
 
 def get_reader(args, is_testing=False):
     if args.dataset.lower() == "fastmri":
+        reconstruction_size = getattr(args, "fastmri_reconstruction_size", None)
         data_reader = FastMRIReader(
-            uniform_input_kspace=tuple(getattr(args, "fastmri_input_size", (384, 384)))
+            reconstruction_size=None if reconstruction_size is None else tuple(reconstruction_size)
         )
     elif args.dataset.lower() == "cmrxrecon":
         data_reader = CMRxReconReader(fixed_mask_types=args.fixed_mask_types)

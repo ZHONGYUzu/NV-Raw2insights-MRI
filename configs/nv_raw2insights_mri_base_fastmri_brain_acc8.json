@@ -7,7 +7,7 @@
     "pp_z_score_norm": false,
     "fixed_mask_types": null,
     "uniform_input_kspace": false,
-    "fastmri_input_size": [384, 384],
+    "fastmri_reconstruction_size": [320, 320],
     "val_interval": 40,
     "num_samples_per_case": 8,
     "data_aug": false,

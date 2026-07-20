@@ -104,23 +104,33 @@ class FastMRIReader(ImageReader):
     - patient_id (str): the patient's id whose measurements were recorded
     """
 
-    def __init__(self, uniform_input_kspace: tuple[int, int] | None = (384, 384)) -> None:
+    def __init__(self, reconstruction_size: tuple[int, int] | None = None) -> None:
         super().__init__()
-        self.uniform_input_kspace = uniform_input_kspace
+        self.reconstruction_size = reconstruction_size
 
     @staticmethod
-    def center_pad_or_crop(array: np.ndarray, spatial_shape: tuple[int, int]) -> np.ndarray:
-        output = np.zeros((*array.shape[:-2], *spatial_shape), dtype=array.dtype)
-        source_slices = []
-        target_slices = []
-        for source_size, target_size in zip(array.shape[-2:], spatial_shape):
-            copied_size = min(source_size, target_size)
-            source_start = (source_size - copied_size) // 2
-            target_start = (target_size - copied_size) // 2
-            source_slices.append(slice(source_start, source_start + copied_size))
-            target_slices.append(slice(target_start, target_start + copied_size))
-        output[..., target_slices[0], target_slices[1]] = array[..., source_slices[0], source_slices[1]]
-        return output
+    def crop_kspace_via_image_domain(array: np.ndarray, spatial_shape: tuple[int, int]) -> np.ndarray:
+        """Remove readout oversampling using the fastMRI image-domain crop convention."""
+        if array.ndim < 2:
+            raise ValueError(f"Expected at least two spatial dimensions, got {array.shape}")
+        if any(target > source for source, target in zip(array.shape[-2:], spatial_shape)):
+            raise ValueError(f"Cannot image-domain crop k-space shape {array.shape[-2:]} to {spatial_shape}")
+
+        spatial_axes = (-2, -1)
+        coil_images = fftshift(
+            ifftn(ifftshift(array, axes=spatial_axes), axes=spatial_axes, norm="ortho"),
+            axes=spatial_axes,
+        )
+        crop_slices = []
+        for source_size, target_size in zip(coil_images.shape[-2:], spatial_shape):
+            start = (source_size - target_size) // 2
+            crop_slices.append(slice(start, start + target_size))
+        coil_images = coil_images[..., crop_slices[0], crop_slices[1]]
+        cropped_kspace = fftshift(
+            fftn(ifftshift(coil_images, axes=spatial_axes), axes=spatial_axes, norm="ortho"),
+            axes=spatial_axes,
+        )
+        return cropped_kspace.astype(array.dtype, copy=False)
 
     def verify_suffix(self, filename: Sequence[PathLike] | PathLike) -> bool:
         """
@@ -165,8 +175,16 @@ class FastMRIReader(ImageReader):
         header = self._get_meta_dict(dat)
         kspace = np.asarray(dat[FastMRIKeys.KSPACE])
         header["source_shape"] = np.asarray(kspace.shape)
-        if self.uniform_input_kspace is not None:
-            kspace = self.center_pad_or_crop(kspace, self.uniform_input_kspace)
+        if self.reconstruction_size is not None:
+            reconstruction_size = self.reconstruction_size
+        elif FastMRIKeys.RECON in dat:
+            reconstruction_size = tuple(int(size) for size in np.asarray(dat[FastMRIKeys.RECON]).shape[-2:])
+        else:
+            raise ValueError(
+                "FastMRIReader requires reconstruction_size when reconstruction_rss is unavailable."
+            )
+        kspace = self.crop_kspace_via_image_domain(kspace, reconstruction_size)
+        header["reconstruction_size"] = np.asarray(reconstruction_size)
         data: ndarray = kspace[np.newaxis, ...]
         data_shape = data.shape
         header[CMRxReconKeys.NUM_FRAMES] = data_shape[0]

@@ -19,9 +19,9 @@ CONFIG=configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json
 DATASET_ROOT=dataset/FastMRIBrainMulticoilVal10Acc8
 INPUT_H5=$DATASET_ROOT/h5_input
 MANIFEST=$DATASET_ROOT/cohort_manifest.json
-OUTPUT_ROOT=output/FastMRIBrainMulticoilVal10Acc8
+OUTPUT_ROOT=output/FastMRIBrainMulticoilVal10GeomFixAcc8
 PREDICTION_DIR=$OUTPUT_ROOT/val_img4ranking
-RESULTS_ROOT=Results/FastMRIBrainMulticoilVal10Acc8
+RESULTS_ROOT=Results/FastMRIBrainMulticoilVal10GeomFixAcc8
 
 finish () {
   status=$?
@@ -67,6 +67,10 @@ nvidia-smi
 "$PYTHON_BIN" scripts/validate_fastmri_inference_data.py \
   "$INPUT_H5" \
   --manifest "$MANIFEST"
+
+"$PYTHON_BIN" scripts/validate_fastmri_reader_geometry.py \
+  "$INPUT_H5" \
+  --max-cases 1
 
 "$PYTHON_BIN" scripts/inference.py \
   -c "$CONFIG" \

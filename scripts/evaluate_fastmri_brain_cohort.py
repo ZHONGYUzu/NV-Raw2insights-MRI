@@ -87,12 +87,17 @@ def main() -> None:
     parser.add_argument("--prediction-dir", type=Path, required=True)
     parser.add_argument("-o", "--output-dir", type=Path, required=True)
     parser.add_argument("--label", default="fastMRI Brain", help="Experiment label used in plots and summary.")
+    parser.add_argument("--max-cases", type=int, help="Evaluate only the first N manifest cases.")
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text())
     cases = manifest.get("cases", [])
     if not cases:
         parser.error(f"No cases found in {args.manifest}")
+    if args.max_cases is not None:
+        if args.max_cases <= 0:
+            parser.error("--max-cases must be positive")
+        cases = cases[: args.max_cases]
     ground_truth_dir = args.output_dir / "ground_truth"
     comparison_dir = args.output_dir / "comparisons"
     ground_truth_dir.mkdir(parents=True, exist_ok=True)

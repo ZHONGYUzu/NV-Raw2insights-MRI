@@ -52,6 +52,17 @@ evaluation. Selection uses the lowest SHA-256 ranks of `seed:filename` with
 seed `20260719`, which is stable across Python versions. Only AXT1 volumes are
 eligible for this first controlled run.
 
+Before submitting the full job, validate one prepared volume on the server:
+
+```bash
+python scripts/validate_fastmri_reader_geometry.py \
+  dataset/FastMRIBrainMulticoilVal10/h5_input \
+  --max-cases 1
+```
+
+The processed k-space must have spatial shape 320×320 and the reported
+zero-filled NMSE against `reconstruction_rss` must be at most `1e-6`.
+
 ## Generated Paths
 
 Derived input metadata and H5 symlinks:
@@ -67,9 +78,9 @@ Model output:
 
 ```text
 output/
-  FastMRIBrainMulticoilVal10Acc8/
-  FastMRIBrainMulticoilVal10Acc16/
-  FastMRIBrainMulticoilVal10Acc24/
+  FastMRIBrainMulticoilVal10GeomFixAcc8/
+  FastMRIBrainMulticoilVal10GeomFixAcc16/
+  FastMRIBrainMulticoilVal10GeomFixAcc24/
     config.json
     val_img4ranking/
       <10 MAT reconstructions with key img4ranking in each experiment root>
@@ -79,9 +90,9 @@ Evaluation output:
 
 ```text
 Results/
-  FastMRIBrainMulticoilVal10Acc8/
-  FastMRIBrainMulticoilVal10Acc16/
-  FastMRIBrainMulticoilVal10Acc24/
+  FastMRIBrainMulticoilVal10GeomFixAcc8/
+  FastMRIBrainMulticoilVal10GeomFixAcc16/
+  FastMRIBrainMulticoilVal10GeomFixAcc24/
     ground_truth/
     comparisons/
     frame_metrics.csv
@@ -90,12 +101,21 @@ Results/
     frame_metrics_violin.png
 ```
 
-The reader standardizes input k-space to 384×384 with centered cropping or
-zero-padding before masking. Saved model output is converted back to
-slice/height/width order and center-cropped to the spatial shape of
-`reconstruction_rss` for evaluation. Metrics are computed per slice using the
-original direct intensity scale; prediction and reference are not independently
-renormalized.
+The older roots without `GeomFix` were produced by directly converting
+640×320 k-space to 384×384 and are geometrically invalid. They are retained as
+an audit record and must not be used for quantitative reporting.
+
+The raw brain k-space has spatial shape 640×320 while `reconstruction_rss` is
+320×320. To remove readout oversampling without changing the field of view, the
+reader applies a centered inverse FFT, center-crops each complex coil image to
+320×320, and applies a centered FFT before masking. It never directly crops one
+k-space axis while padding the other. Before GPU inference, the SLURM job checks
+that fully sampled RSS from the processed k-space numerically reproduces the H5
+`reconstruction_rss` geometry.
+
+Saved model output is converted back to slice/height/width order for evaluation.
+Metrics are computed per slice using the original direct intensity scale;
+prediction and reference are not independently renormalized.
 
 ## One-Case Debug Run
 
@@ -105,7 +125,7 @@ After the cohort has been created, use a separate output root:
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
   -i dataset/FastMRIBrainMulticoilVal10/h5_input \
-  -o output/FastMRIBrainMulticoilValDebugAcc8 \
+  -o output/FastMRIBrainMulticoilValGeomFixDebugAcc8 \
   --debug \
   --num-workers 0 \
   --accelerations 8 \
@@ -114,3 +134,30 @@ python scripts/inference.py \
 
 `--debug` processes only the first sorted H5 symlink. Do not include it in the
 ten-case production run.
+
+Evaluate and visually inspect that one corrected case before submitting the
+full job:
+
+```bash
+python scripts/evaluate_fastmri_brain_cohort.py \
+  --manifest dataset/FastMRIBrainMulticoilVal10/cohort_manifest.json \
+  --prediction-dir output/FastMRIBrainMulticoilValGeomFixDebugAcc8/val_img4ranking \
+  --label "fastMRI Brain AXT1 GeomFix Debug Acc8" \
+  --max-cases 1 \
+  -o Results/FastMRIBrainMulticoilValGeomFixDebugAcc8
+```
+
+Confirm the corresponding PNG under `comparisons/` has matching orientation
+and anatomy before running all ten cases and all three accelerations.
+
+## Preprocessing References
+
+- The official fastMRI data documentation defines brain multi-coil k-space as
+  `(slice, coil, height, width)` and `reconstruction_rss` as the central 320×320
+  RSS reconstruction: <https://github.com/facebookresearch/fastMRI/blob/main/fastmri/data/README.md>.
+- The official transform implementation removes oversampling by applying an
+  inverse FFT, complex image-domain center crop, and FFT:
+  <https://github.com/facebookresearch/fastMRI/blob/main/fastmri/data/transforms.py>.
+- Zbontar et al. explain that ground-truth images are center-cropped to 320×320
+  to compensate for readout-direction oversampling:
+  <https://arxiv.org/abs/1811.08839>.
