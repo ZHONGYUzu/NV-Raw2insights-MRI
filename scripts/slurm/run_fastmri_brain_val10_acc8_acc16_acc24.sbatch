@@ -51,13 +51,13 @@ nvidia-smi
 "$PYTHON_BIN" --version
 
 # Select the cohort once. Every acceleration therefore uses exactly the same
-# AXT2 volumes and ground truth. H5 inputs are read-only source symlinks.
+# AXT1 volumes and ground truth. H5 inputs are read-only source symlinks.
 "$PYTHON_BIN" scripts/create_fastmri_brain_cohort.py \
   --source-dir "$RAW_SOURCE" \
   --output-root "$DATASET_ROOT" \
   --num-cases 10 \
   --seed 20260719 \
-  --acquisition AXT2 \
+  --acquisition AXT1 \
   --overwrite
 
 "$PYTHON_BIN" scripts/validate_fastmri_inference_data.py \
@@ -93,7 +93,7 @@ for acc in 8 16 24; do
   "$PYTHON_BIN" scripts/evaluate_fastmri_brain_cohort.py \
     --manifest "$MANIFEST" \
     --prediction-dir "$prediction_dir" \
-    --label "fastMRI Brain Acc${acc}" \
+    --label "fastMRI Brain AXT1 Acc${acc}" \
     -o "$results_root"
 
   echo "Acceleration $acc completed: $actual_cases cases"

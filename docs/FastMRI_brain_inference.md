@@ -1,7 +1,7 @@
 # fastMRI Brain Multi-Coil Inference
 
 This workflow runs the released base model at nominal accelerations 8, 16, and
-24 on ten reproducibly selected AXT2 volumes from the fastMRI brain multi-coil
+24 on ten reproducibly selected AXT1 volumes from the fastMRI brain multi-coil
 validation set. Native H5 files are read directly; they are not converted into
 the CMRxRecon JSON/MAT interface.
 
@@ -23,9 +23,12 @@ equispaced mask with nominal acceleration 8, 16, or 24 and center fraction
 Cartesian mask class. Keeping the same center fraction controls the ACS width
 while changing the nominal acceleration.
 
-AXT2 is mapped to the checkpoint's existing `T2w` conditioning class. Other
-supported brain mappings are AXT1/AXT1PRE/AXT1POST to `T1w` and AXFLAIR to
-`T2w`. The checkpoint's class dimensions are not changed.
+AXT1 is mapped to the checkpoint's existing `T1w` conditioning class. The
+inspected validation folder contains 34 AXT1, 77 AXT1PRE, 287 AXT1POST, and 106
+AXFLAIR volumes, but no AXT2 volumes. AXT1 is used for the first controlled
+cohort so pre/post-contrast acquisitions are not mixed. Other supported reader
+mappings are AXT1PRE/AXT1POST to `T1w`, and AXFLAIR/AXT2 to `T2w`. The
+checkpoint's class dimensions are not changed.
 
 ## Submit The Complete Job
 
@@ -46,7 +49,7 @@ tail -F logs/fastmri_b10_aall_<job-id>.out
 
 The job performs cohort creation, validation, inference, output counting, and
 evaluation. Selection uses the lowest SHA-256 ranks of `seed:filename` with
-seed `20260719`, which is stable across Python versions. Only AXT2 volumes are
+seed `20260719`, which is stable across Python versions. Only AXT1 volumes are
 eligible for this first controlled run.
 
 ## Generated Paths

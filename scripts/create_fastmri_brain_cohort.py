@@ -81,9 +81,9 @@ def main() -> None:
     parser.add_argument(
         "--acquisition",
         nargs="+",
-        default=["AXT2"],
+        default=["AXT1"],
         choices=sorted(SUPPORTED_ACQUISITIONS),
-        help="Eligible raw fastMRI acquisition labels (default: AXT2).",
+        help="Eligible raw fastMRI acquisition labels (default: AXT1).",
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()

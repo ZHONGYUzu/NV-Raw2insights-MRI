@@ -54,14 +54,14 @@ echo "Evaluation results: $RESULTS_ROOT"
 nvidia-smi
 "$PYTHON_BIN" --version
 
-# Select ten AXT2 validation volumes reproducibly. The derived H5 files are
+# Select ten AXT1 validation volumes reproducibly. The derived H5 files are
 # symlinks; the raw fastMRI dataset remains read-only and is not copied.
 "$PYTHON_BIN" scripts/create_fastmri_brain_cohort.py \
   --source-dir "$RAW_SOURCE" \
   --output-root "$DATASET_ROOT" \
   --num-cases 10 \
   --seed 20260719 \
-  --acquisition AXT2 \
+  --acquisition AXT1 \
   --overwrite
 
 "$PYTHON_BIN" scripts/validate_fastmri_inference_data.py \
