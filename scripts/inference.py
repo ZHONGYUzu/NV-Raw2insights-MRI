@@ -255,6 +255,12 @@ def infer(args):
             # iterate through all samples:
             num_samples = input.shape[0]
             outputs = []
+            slice_window_single_frame = args.dataset.lower() == "fastmri" and final_shape[-5] == 1
+            if args.debug and slice_window_single_frame:
+                print(
+                    f"Using adjacent-slice {args.num_frames}-view windows for single-frame fastMRI input.",
+                    flush=True,
+                )
             timings["prepare"] = time.perf_counter() - prepare_start
             timings["window_and_transfer"] = 0.0
             timings["model"] = 0.0
@@ -269,11 +275,23 @@ def infer(args):
             ):
                 # forward pass
                 stage_start = time.perf_counter()
-                inp, window_idx = windowed_input(input, micro_b, final_shape, num_frames=args.num_frames)
+                inp, window_idx = windowed_input(
+                    input,
+                    micro_b,
+                    final_shape,
+                    num_frames=args.num_frames,
+                    slice_window_single_frame=slice_window_single_frame,
+                )
                 mas = torch.Tensor(mask[window_idx])
                 smap = None
                 if sensitivity_maps is not None:
-                    smap, _ = windowed_input(sensitivity_maps, micro_b, final_shape, num_frames=args.num_frames)
+                    smap, _ = windowed_input(
+                        sensitivity_maps,
+                        micro_b,
+                        final_shape,
+                        num_frames=args.num_frames,
+                        slice_window_single_frame=slice_window_single_frame,
+                    )
                     smap = smap.to(device)
                 inp, mas, mean, std = (
                     inp.to(device),

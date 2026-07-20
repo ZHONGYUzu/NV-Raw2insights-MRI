@@ -825,7 +825,9 @@ def windowed_input(input, micro_b, final_shape, num_frames, slice_window_single_
         if single_frame and slice_window_single_frame:
             # sliding window in the slice dimension
             centers = slice_i
-            neighbors = [(centers + off) % total_slices for off in offsets]
+            # Slices are spatial rather than periodic: repeat the nearest edge
+            # slice instead of wrapping the first and last slices together.
+            neighbors = [min(max(centers + off, 0), total_slices - 1) for off in offsets]
             idxs = [xy2ind(s, frame_i, total_frames, total_slices) for s in neighbors]
         else:
             # sliding window in the frame dimension (original behavior)

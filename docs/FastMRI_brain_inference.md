@@ -80,9 +80,9 @@ Model output:
 
 ```text
 output/
-  FastMRIBrainMulticoilVal10GeomFixAcc8/
-  FastMRIBrainMulticoilVal10GeomFixAcc16/
-  FastMRIBrainMulticoilVal10GeomFixAcc24/
+  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc8/
+  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc16/
+  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc24/
     config.json
     val_img4ranking/
       <10 MAT reconstructions with key img4ranking in each experiment root>
@@ -92,9 +92,9 @@ Evaluation output:
 
 ```text
 Results/
-  FastMRIBrainMulticoilVal10GeomFixAcc8/
-  FastMRIBrainMulticoilVal10GeomFixAcc16/
-  FastMRIBrainMulticoilVal10GeomFixAcc24/
+  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc8/
+  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc16/
+  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc24/
     ground_truth/
     comparisons/
     frame_metrics.csv
@@ -115,6 +115,13 @@ k-space axis while padding the other. Before GPU inference, the SLURM job checks
 that fully sampled RSS from the processed k-space numerically reproduces the H5
 `reconstruction_rss` geometry.
 
+Because fastMRI volumes have one frame per slice while the released model uses
+five-view windows, inference uses the two neighboring slices on either side of
+the requested slice. For example, middle slice 8 receives slices 6–10 rather
+than five copies of slice 8. At the volume boundaries, the nearest edge slice
+is repeated instead of wrapping the first and last slices together. CMRxRecon
+and CINE inputs retain their original temporal-window behavior.
+
 Saved model output is converted back to slice/height/width order for evaluation.
 Metrics are computed per slice using the original direct intensity scale;
 prediction and reference are not independently renormalized.
@@ -127,7 +134,7 @@ After the cohort has been created, use a separate output root:
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
   -i dataset/FastMRIBrainMulticoilVal10/h5_input \
-  -o output/FastMRIBrainMulticoilValGeomFixDebugAcc8 \
+  -o output/FastMRIBrainMulticoilValGeomFixSliceWindowDebugAcc8 \
   --debug \
   --num-workers 0 \
   --accelerations 8 \
@@ -143,10 +150,10 @@ full job:
 ```bash
 python scripts/evaluate_fastmri_brain_cohort.py \
   --manifest dataset/FastMRIBrainMulticoilVal10/cohort_manifest.json \
-  --prediction-dir output/FastMRIBrainMulticoilValGeomFixDebugAcc8/val_img4ranking \
-  --label "fastMRI Brain AXT1 GeomFix Debug Acc8" \
+  --prediction-dir output/FastMRIBrainMulticoilValGeomFixSliceWindowDebugAcc8/val_img4ranking \
+  --label "fastMRI Brain AXT1 GeomFix SliceWindow Debug Acc8" \
   --max-cases 1 \
-  -o Results/FastMRIBrainMulticoilValGeomFixDebugAcc8
+  -o Results/FastMRIBrainMulticoilValGeomFixSliceWindowDebugAcc8
 ```
 
 Confirm the corresponding PNG under `comparisons/` has matching orientation

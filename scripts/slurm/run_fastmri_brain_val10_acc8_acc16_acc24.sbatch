@@ -71,9 +71,9 @@ nvidia-smi
 expected_cases=$("$PYTHON_BIN" -c 'import json,sys; print(json.load(open(sys.argv[1]))["num_selected_cases"])' "$MANIFEST")
 
 for acc in 8 16 24; do
-  output_root="output/FastMRIBrainMulticoilVal10GeomFixAcc${acc}"
+  output_root="output/FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc${acc}"
   prediction_dir="$output_root/val_img4ranking"
-  results_root="Results/FastMRIBrainMulticoilVal10GeomFixAcc${acc}"
+  results_root="Results/FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc${acc}"
 
   echo "========== Starting nominal acceleration ${acc} =========="
   echo "Predictions: $prediction_dir"
