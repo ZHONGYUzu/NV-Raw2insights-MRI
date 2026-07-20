@@ -6,14 +6,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import h5py
-import numpy as np
-from scipy.fft import fftshift, ifftn, ifftshift
 
-from readers import FastMRIKeys, FastMRIReader
+def rss_from_kspace(kspace):
+    import numpy as np
+    from scipy.fft import fftshift, ifftn, ifftshift
 
-
-def rss_from_kspace(kspace: np.ndarray) -> np.ndarray:
     spatial_axes = (-2, -1)
     coil_images = fftshift(
         ifftn(ifftshift(kspace, axes=spatial_axes), axes=spatial_axes, norm="ortho"),
@@ -36,11 +33,18 @@ def main() -> None:
     if not paths:
         parser.error(f"No H5 files found under {args.input_dir}")
 
+    print("Loading lightweight fastMRI preprocessing...", flush=True)
+    import h5py
+    import numpy as np
+
+    from fastmri_preprocessing import crop_kspace_via_image_domain
+
     failures = []
     for path in paths:
+        print(f"Checking one slice from {path.name}...", flush=True)
         with h5py.File(path, "r") as h5_file:
-            kspace_dataset = h5_file[FastMRIKeys.KSPACE.value]
-            target_dataset = h5_file[FastMRIKeys.RECON.value]
+            kspace_dataset = h5_file["kspace"]
+            target_dataset = h5_file["reconstruction_rss"]
             num_slices = int(kspace_dataset.shape[0])
             slice_index = num_slices // 2 if args.slice_index is None else args.slice_index
             if not 0 <= slice_index < num_slices:
@@ -49,7 +53,7 @@ def main() -> None:
             source_kspace = np.asarray(kspace_dataset[slice_index])
             target = np.asarray(target_dataset[slice_index], dtype=np.float32)
 
-        processed_kspace = FastMRIReader.crop_kspace_via_image_domain(source_kspace, target.shape[-2:])
+        processed_kspace = crop_kspace_via_image_domain(source_kspace, target.shape[-2:])
         reconstruction = rss_from_kspace(processed_kspace)
         if reconstruction.shape != target.shape:
             raise ValueError(f"{path.name}: RSS {reconstruction.shape} != target {target.shape}")
