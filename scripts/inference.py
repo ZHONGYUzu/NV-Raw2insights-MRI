@@ -312,6 +312,16 @@ def infer(args):
 
                 stage_start = time.perf_counter()
                 output = output[:, args.num_frames // 2]
+                if getattr(args, "hard_data_consistency", False):
+                    reference = inp[:, args.num_frames // 2]
+                    acquired = mas[:, args.num_frames // 2].bool()
+                    output_kspace = fftn_centered(output.float(), spatial_dims=2, is_complex=True)
+                    reference_kspace = fftn_centered(reference.float(), spatial_dims=2, is_complex=True)
+                    output = ifftn_centered(
+                        torch.where(acquired, reference_kspace, output_kspace),
+                        spatial_dims=2,
+                        is_complex=True,
+                    )
                 output = output * std[micro_b] + mean[micro_b]  # [1, c/1, 320, 320, 2]
                 output = complex_abs(crop_k_space(output, (final_shape[-2], final_shape[-1])))  # [b, c/1, 320, 320]
 
@@ -460,6 +470,12 @@ if __name__ == "__main__":
         default=False,
         help="Disable ACS-region extraction for sensitivity-map estimation; useful when masks do not contain a filled ACS center.",
     )
+    parser.add_argument(
+        "--hard-data-consistency",
+        action="store_true",
+        default=False,
+        help="Replace predicted k-space at acquired locations with the measured values before saving.",
+    )
 
     args = parser.parse_args()
     config = load_config(args.config)
@@ -471,6 +487,7 @@ if __name__ == "__main__":
     config.debug = args.debug
     config.profile_timing = args.profile_timing
     config.profile_interval = max(args.profile_interval, 1)
+    config.hard_data_consistency = args.hard_data_consistency
     if args.num_workers is not None:
         if args.num_workers < 0:
             parser.error("--num-workers must be non-negative")

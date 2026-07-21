@@ -159,6 +159,26 @@ python scripts/evaluate_fastmri_brain_cohort.py \
 Confirm the corresponding PNG under `comparisons/` has matching orientation
 and anatomy before running all ten cases and all three accelerations.
 
+If the model output is substantially blurrier than the reference, run a
+one-case hard-data-consistency diagnostic into another new output root:
+
+```bash
+python scripts/inference.py \
+  -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
+  -i dataset/FastMRIBrainMulticoilVal10/h5_input \
+  -o output/FastMRIBrainMulticoilValGeomFixSliceWindowHardDCDebugAcc8 \
+  --debug \
+  --num-workers 0 \
+  --accelerations 8 \
+  --hard-data-consistency \
+  --profile-timing
+```
+
+This replaces the final prediction at acquired k-space locations with the
+measured values. It is an ablation for diagnosing checkpoint soft-DC and mask
+conditioning compatibility; do not silently mix its results with the default
+model outputs.
+
 ## Preprocessing References
 
 - The official fastMRI data documentation defines brain multi-coil k-space as
