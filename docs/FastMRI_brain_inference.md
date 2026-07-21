@@ -80,9 +80,9 @@ Model output:
 
 ```text
 output/
-  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc8/
-  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc16/
-  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc24/
+  FastMRIBrainMulticoilVal10GeomFixFixedMaskAcc8/
+  FastMRIBrainMulticoilVal10GeomFixFixedMaskAcc16/
+  FastMRIBrainMulticoilVal10GeomFixFixedMaskAcc24/
     config.json
     val_img4ranking/
       <10 MAT reconstructions with key img4ranking in each experiment root>
@@ -92,9 +92,9 @@ Evaluation output:
 
 ```text
 Results/
-  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc8/
-  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc16/
-  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc24/
+  FastMRIBrainMulticoilVal10GeomFixFixedMaskAcc8/
+  FastMRIBrainMulticoilVal10GeomFixFixedMaskAcc16/
+  FastMRIBrainMulticoilVal10GeomFixFixedMaskAcc24/
     ground_truth/
     comparisons/
     frame_metrics.csv
@@ -115,18 +115,14 @@ k-space axis while padding the other. Before GPU inference, the SLURM job checks
 that fully sampled RSS from the processed k-space numerically reproduces the H5
 `reconstruction_rss` geometry.
 
-The official fastMRI equispaced mask samples the last spatial k-space axis,
-whereas the checkpoint's CMRxRecon-style mask conditioning treats the
-second-last axis as phase encoding. The fastMRI model-axis adapter therefore
-swaps the two spatial axes for full k-space, masked k-space, mask, and optional
-sensitivity maps after mask generation. It swaps the reconstructed RSS image
-back before saving, so evaluation remains aligned with the original
-`reconstruction_rss`. The adapter is enabled by
-`fastmri_model_axis_adapter: true` in the fastMRI config.
+An investigated model-axis adapter can swap the two spatial axes around model
+inference, but the one-case experiment degraded the direct-scale metrics. It is
+therefore retained only as an ablation and disabled by
+`fastmri_model_axis_adapter: false` in the active fastMRI config.
 
 Because fastMRI volumes have one frame per slice while the released model uses
-five-view windows, the controlled axis-adapter test repeats the same static
-slice across the five model views. Neighboring-slice windows remain available
+five-view windows, the active controlled test repeats the same static slice
+across the five model views. Neighboring-slice windows remain available
 as an explicit ablation via `fastmri_adjacent_slice_window`, but are disabled
 by default so spatial averaging is not mixed into the axis experiment.
 
@@ -142,7 +138,7 @@ After the cohort has been created, use a separate output root:
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
   -i dataset/FastMRIBrainMulticoilVal10/h5_input \
-  -o output/FastMRIBrainMulticoilValGeomFixAxisAdapterDebugAcc8 \
+  -o output/FastMRIBrainMulticoilValGeomFixFixedMaskDebugAcc8 \
   --debug \
   --num-workers 0 \
   --accelerations 8 \
@@ -158,14 +154,47 @@ full job:
 ```bash
 python scripts/evaluate_fastmri_brain_cohort.py \
   --manifest dataset/FastMRIBrainMulticoilVal10/cohort_manifest.json \
-  --prediction-dir output/FastMRIBrainMulticoilValGeomFixAxisAdapterDebugAcc8/val_img4ranking \
-  --label "fastMRI Brain AXT1 GeomFix AxisAdapter Debug Acc8" \
+  --prediction-dir output/FastMRIBrainMulticoilValGeomFixFixedMaskDebugAcc8/val_img4ranking \
+  --label "fastMRI Brain AXT1 GeomFix FixedMask Debug Acc8" \
   --max-cases 1 \
-  -o Results/FastMRIBrainMulticoilValGeomFixAxisAdapterDebugAcc8
+  -o Results/FastMRIBrainMulticoilValGeomFixFixedMaskDebugAcc8
 ```
 
 Confirm the corresponding PNG under `comparisons/` has matching orientation
 and anatomy before running all ten cases and all three accelerations.
+
+## Zero-Filled Baseline
+
+Before accepting a model result, create a zero-filled RSS baseline with the
+same official-style equispaced mask parameters and fixed offset used by model
+inference:
+
+```bash
+python scripts/create_fastmri_zero_filled_baseline.py \
+  --manifest dataset/FastMRIBrainMulticoilVal10/cohort_manifest.json \
+  -o output/FastMRIBrainMulticoilValZeroFilledFixedMaskAcc8 \
+  --acceleration 8 \
+  --center-fraction 0.04 \
+  --offset 0 \
+  --max-cases 1
+```
+
+Evaluate it through the same direct-scale evaluator:
+
+```bash
+python scripts/evaluate_fastmri_brain_cohort.py \
+  --manifest dataset/FastMRIBrainMulticoilVal10/cohort_manifest.json \
+  --prediction-dir output/FastMRIBrainMulticoilValZeroFilledFixedMaskAcc8 \
+  --label "fastMRI AXT1 Zero-Filled FixedMask Acc8" \
+  --reconstruction-title "Zero-filled RSS" \
+  --max-cases 1 \
+  -o Results/FastMRIBrainMulticoilValZeroFilledFixedMaskAcc8
+```
+
+The active inference config sets `fastmri_equispaced_offset: 0`, so a new model
+debug run and this baseline use exactly the same sampled columns. Do not compare
+the fixed-mask baseline against an older model output generated with a random
+offset as though the masks were identical.
 
 If the model output is substantially blurrier than the reference, run a
 one-case hard-data-consistency diagnostic into another new output root:
@@ -174,7 +203,7 @@ one-case hard-data-consistency diagnostic into another new output root:
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
   -i dataset/FastMRIBrainMulticoilVal10/h5_input \
-  -o output/FastMRIBrainMulticoilValGeomFixAxisAdapterHardDCDebugAcc8 \
+  -o output/FastMRIBrainMulticoilValGeomFixFixedMaskHardDCDebugAcc8 \
   --debug \
   --num-workers 0 \
   --accelerations 8 \

@@ -59,7 +59,13 @@ def write_csv(rows: list[Dict[str, object]], path: Path) -> None:
         writer.writerows(rows)
 
 
-def save_comparison(target: np.ndarray, prediction: np.ndarray, path: Path, slice_index: int) -> None:
+def save_comparison(
+    target: np.ndarray,
+    prediction: np.ndarray,
+    path: Path,
+    slice_index: int,
+    reconstruction_title: str,
+) -> None:
     reference = target[slice_index]
     reconstruction = prediction[slice_index]
     error = np.abs(reconstruction - reference)
@@ -68,7 +74,7 @@ def save_comparison(target: np.ndarray, prediction: np.ndarray, path: Path, slic
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
     panels = (
         ("fastMRI reconstruction_rss", reference, "gray", vmax),
-        ("Model reconstruction", reconstruction, "gray", vmax),
+        (reconstruction_title, reconstruction, "gray", vmax),
         ("Absolute error", error, "magma", error_vmax),
     )
     for axis, (title, image, cmap, limit) in zip(axes, panels):
@@ -87,6 +93,11 @@ def main() -> None:
     parser.add_argument("--prediction-dir", type=Path, required=True)
     parser.add_argument("-o", "--output-dir", type=Path, required=True)
     parser.add_argument("--label", default="fastMRI Brain", help="Experiment label used in plots and summary.")
+    parser.add_argument(
+        "--reconstruction-title",
+        default="Model reconstruction",
+        help="Title for the reconstructed-image comparison panel.",
+    )
     parser.add_argument("--max-cases", type=int, help="Evaluate only the first N manifest cases.")
     args = parser.parse_args()
 
@@ -145,7 +156,13 @@ def main() -> None:
             "frame_metrics_summary": summarize_frames(case_rows),
         }
         case_summaries.append(case_summary)
-        save_comparison(target, prediction, comparison_dir / f"{case_id}.png", target.shape[0] // 2)
+        save_comparison(
+            target,
+            prediction,
+            comparison_dir / f"{case_id}.png",
+            target.shape[0] // 2,
+            args.reconstruction_title,
+        )
         mean_metrics = case_summary["frame_metrics_summary"]
         print(
             f"{case_id}: slices={target.shape[0]}, aligned={target.shape[1:]}, "

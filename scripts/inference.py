@@ -175,6 +175,7 @@ def infer(args):
                 accelerations=([0.0] if not hasattr(args, "accelerations") else args.accelerations),
                 spatial_dims=2,
                 is_complex=True,
+                equispaced_offset=getattr(args, "fastmri_equispaced_offset", None),
             ),
             Lambdad(keys=["kspace"], func=lambda x: convert_to_tensor_complex(x)),
             Lambdad(

@@ -410,7 +410,12 @@ class EquispacedKspaceMask(KspaceMask):
         # Determine acceleration rate by adjusting for the
         # number of low frequencies
         adjusted_accel = (acceleration * (num_low_freqs - num_cols)) / (num_low_freqs * acceleration - num_cols)
-        offset = self.R.randint(0, round(adjusted_accel))
+        fixed_offset = getattr(self, "fixed_offset", None)
+        offset = (
+            self.R.randint(0, round(adjusted_accel))
+            if fixed_offset is None
+            else int(fixed_offset) % round(adjusted_accel)
+        )
 
         accel_samples = np.arange(offset, num_cols - 1, adjusted_accel)
         accel_samples = np.around(accel_samples).astype(np.uint)
@@ -697,6 +702,8 @@ class KspaceMaskd(RandomizableTransform, MapTransform):
             shape (...,num_coils,H,W,D), sampling is done along D.
         is_complex: if True, then the last dimension will be reserved
             for real/imaginary parts.
+        equispaced_offset: Optional fixed starting offset for an equispaced
+            mask. If omitted, the offset is randomized as before.
         allow_missing_keys: don't raise exception if key is missing.
     """
 
@@ -713,6 +720,7 @@ class KspaceMaskd(RandomizableTransform, MapTransform):
         is_complex: bool = True,
         allow_missing_keys: bool = False,
         return_ifft: bool = False,
+        equispaced_offset: int | None = None,
     ) -> None:
         MapTransform.__init__(self, keys, allow_missing_keys)
         self.maskers = []
@@ -727,9 +735,10 @@ class KspaceMaskd(RandomizableTransform, MapTransform):
         }
         self.return_ifft = return_ifft
         for m in mask_types:
-            self.maskers.append(
-                self.masker_enum[m](center_fractions, accelerations, acs_lines, spatial_dims, is_complex)
-            )
+            masker = self.masker_enum[m](center_fractions, accelerations, acs_lines, spatial_dims, is_complex)
+            if isinstance(masker, EquispacedKspaceMask):
+                masker.fixed_offset = equispaced_offset
+            self.maskers.append(masker)
 
     def set_random_state(self, seed: int | None = None, state: np.random.RandomState | None = None) -> KspaceMaskd:
         super().set_random_state(seed, state)
