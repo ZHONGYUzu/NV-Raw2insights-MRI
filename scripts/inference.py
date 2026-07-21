@@ -153,6 +153,10 @@ def infer(args):
     model = torch.compile(model) if args.uniform_input_kspace else model
     print(f"#model_params: {np.sum([len(p.flatten()) for p in model.parameters()]) * 1.0e-6:.2f}M")
 
+    fastmri_model_axis_adapter = (
+        args.dataset.lower() == "fastmri" and getattr(args, "fastmri_model_axis_adapter", False)
+    )
+
     test_transforms = Compose(
         [
             LoadImaged(
@@ -177,6 +181,15 @@ def infer(args):
                 keys=["sensitivity_maps"],
                 func=lambda x: convert_to_tensor_complex(x),
                 allow_missing_keys=True,
+            ),
+            (
+                Lambdad(
+                    keys=["kspace", "kspace_masked", "mask", "sensitivity_maps"],
+                    func=lambda x: x.transpose(-3, -2),
+                    allow_missing_keys=True,
+                )
+                if fastmri_model_axis_adapter
+                else Identityd(keys=["kspace"])
             ),
             (
                 ResizeWithPadOrCropd(
@@ -244,8 +257,36 @@ def infer(args):
             sensitivity_maps = test_data["sensitivity_maps"][0] if "sensitivity_maps" in test_data else None
             if args.debug:
                 print(file_name, mask_type, acc_factor, acq_type)
+                if fastmri_model_axis_adapter:
+                    mask_bool = mask[..., 0].bool()
+                    constant_along_model_frequency = torch.equal(
+                        mask_bool,
+                        mask_bool[..., :1].expand_as(mask_bool),
+                    )
+                    varies_along_model_phase = not torch.equal(
+                        mask_bool,
+                        mask_bool[..., :1, :].expand_as(mask_bool),
+                    )
+                    if not (constant_along_model_frequency and varies_along_model_phase):
+                        raise RuntimeError(
+                            "fastMRI model-axis adapter produced an unexpected mask orientation; "
+                            "expected variation along model PE/H and constancy along model frequency/W."
+                        )
+                    print(
+                        "Verified adapted mask orientation: varies along model PE/H, "
+                        "constant along model frequency/W.",
+                        flush=True,
+                    )
             prepare_start = time.perf_counter()
             final_shape = [int(s) for s in final_shape]
+            model_spatial_shape = (
+                [final_shape[-1], final_shape[-2]] if fastmri_model_axis_adapter else final_shape[-2:]
+            )
+            if args.debug and fastmri_model_axis_adapter:
+                print(
+                    "Using fastMRI model-axis adapter: source W becomes model PE/H; output is transposed back.",
+                    flush=True,
+                )
             input = (
                 fftn_centered(input, spatial_dims=2, is_complex=True)
                 if args.model_type.lower() in ["varnet", "kspace_mar"]
@@ -255,7 +296,11 @@ def infer(args):
             # iterate through all samples:
             num_samples = input.shape[0]
             outputs = []
-            slice_window_single_frame = args.dataset.lower() == "fastmri" and final_shape[-5] == 1
+            slice_window_single_frame = (
+                args.dataset.lower() == "fastmri"
+                and final_shape[-5] == 1
+                and getattr(args, "fastmri_adjacent_slice_window", False)
+            )
             if args.debug and slice_window_single_frame:
                 print(
                     f"Using adjacent-slice {args.num_frames}-view windows for single-frame fastMRI input.",
@@ -323,7 +368,7 @@ def infer(args):
                         is_complex=True,
                     )
                 output = output * std[micro_b] + mean[micro_b]  # [1, c/1, 320, 320, 2]
-                output = complex_abs(crop_k_space(output, (final_shape[-2], final_shape[-1])))  # [b, c/1, 320, 320]
+                output = complex_abs(crop_k_space(output, model_spatial_shape))  # [b, c/1, h, w]
 
                 outputs.append(output.data.cpu().numpy())
                 timings["output"] += time.perf_counter() - stage_start
@@ -351,6 +396,8 @@ def infer(args):
 
             stage_start = time.perf_counter()
             outputs_rss = np.sqrt(np.sum(outputs[0] ** 2, axis=-3))  # RSS: (time), slice, h, w
+            if fastmri_model_axis_adapter:
+                outputs_rss = outputs_rss.swapaxes(-2, -1)
             timings["rss"] = time.perf_counter() - stage_start
 
             stage_start = time.perf_counter()

@@ -19,9 +19,9 @@ CONFIG=configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json
 DATASET_ROOT=dataset/FastMRIBrainMulticoilVal10Acc8
 INPUT_H5=$DATASET_ROOT/h5_input
 MANIFEST=$DATASET_ROOT/cohort_manifest.json
-OUTPUT_ROOT=output/FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc8
+OUTPUT_ROOT=output/FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc8
 PREDICTION_DIR=$OUTPUT_ROOT/val_img4ranking
-RESULTS_ROOT=Results/FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc8
+RESULTS_ROOT=Results/FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc8
 
 finish () {
   status=$?

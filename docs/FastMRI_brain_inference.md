@@ -80,9 +80,9 @@ Model output:
 
 ```text
 output/
-  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc8/
-  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc16/
-  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc24/
+  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc8/
+  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc16/
+  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc24/
     config.json
     val_img4ranking/
       <10 MAT reconstructions with key img4ranking in each experiment root>
@@ -92,9 +92,9 @@ Evaluation output:
 
 ```text
 Results/
-  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc8/
-  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc16/
-  FastMRIBrainMulticoilVal10GeomFixSliceWindowAcc24/
+  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc8/
+  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc16/
+  FastMRIBrainMulticoilVal10GeomFixAxisAdapterAcc24/
     ground_truth/
     comparisons/
     frame_metrics.csv
@@ -115,12 +115,20 @@ k-space axis while padding the other. Before GPU inference, the SLURM job checks
 that fully sampled RSS from the processed k-space numerically reproduces the H5
 `reconstruction_rss` geometry.
 
+The official fastMRI equispaced mask samples the last spatial k-space axis,
+whereas the checkpoint's CMRxRecon-style mask conditioning treats the
+second-last axis as phase encoding. The fastMRI model-axis adapter therefore
+swaps the two spatial axes for full k-space, masked k-space, mask, and optional
+sensitivity maps after mask generation. It swaps the reconstructed RSS image
+back before saving, so evaluation remains aligned with the original
+`reconstruction_rss`. The adapter is enabled by
+`fastmri_model_axis_adapter: true` in the fastMRI config.
+
 Because fastMRI volumes have one frame per slice while the released model uses
-five-view windows, inference uses the two neighboring slices on either side of
-the requested slice. For example, middle slice 8 receives slices 6–10 rather
-than five copies of slice 8. At the volume boundaries, the nearest edge slice
-is repeated instead of wrapping the first and last slices together. CMRxRecon
-and CINE inputs retain their original temporal-window behavior.
+five-view windows, the controlled axis-adapter test repeats the same static
+slice across the five model views. Neighboring-slice windows remain available
+as an explicit ablation via `fastmri_adjacent_slice_window`, but are disabled
+by default so spatial averaging is not mixed into the axis experiment.
 
 Saved model output is converted back to slice/height/width order for evaluation.
 Metrics are computed per slice using the original direct intensity scale;
@@ -134,7 +142,7 @@ After the cohort has been created, use a separate output root:
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
   -i dataset/FastMRIBrainMulticoilVal10/h5_input \
-  -o output/FastMRIBrainMulticoilValGeomFixSliceWindowDebugAcc8 \
+  -o output/FastMRIBrainMulticoilValGeomFixAxisAdapterDebugAcc8 \
   --debug \
   --num-workers 0 \
   --accelerations 8 \
@@ -150,10 +158,10 @@ full job:
 ```bash
 python scripts/evaluate_fastmri_brain_cohort.py \
   --manifest dataset/FastMRIBrainMulticoilVal10/cohort_manifest.json \
-  --prediction-dir output/FastMRIBrainMulticoilValGeomFixSliceWindowDebugAcc8/val_img4ranking \
-  --label "fastMRI Brain AXT1 GeomFix SliceWindow Debug Acc8" \
+  --prediction-dir output/FastMRIBrainMulticoilValGeomFixAxisAdapterDebugAcc8/val_img4ranking \
+  --label "fastMRI Brain AXT1 GeomFix AxisAdapter Debug Acc8" \
   --max-cases 1 \
-  -o Results/FastMRIBrainMulticoilValGeomFixSliceWindowDebugAcc8
+  -o Results/FastMRIBrainMulticoilValGeomFixAxisAdapterDebugAcc8
 ```
 
 Confirm the corresponding PNG under `comparisons/` has matching orientation
@@ -166,7 +174,7 @@ one-case hard-data-consistency diagnostic into another new output root:
 python scripts/inference.py \
   -c configs/nv_raw2insights_mri_base_fastmri_brain_acc8.json \
   -i dataset/FastMRIBrainMulticoilVal10/h5_input \
-  -o output/FastMRIBrainMulticoilValGeomFixSliceWindowHardDCDebugAcc8 \
+  -o output/FastMRIBrainMulticoilValGeomFixAxisAdapterHardDCDebugAcc8 \
   --debug \
   --num-workers 0 \
   --accelerations 8 \
