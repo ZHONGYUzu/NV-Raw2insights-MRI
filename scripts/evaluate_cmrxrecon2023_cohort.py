@@ -58,6 +58,8 @@ def main() -> None:
     case_summaries: list[Dict[str, object]] = []
     for case in cases:
         case_id = str(case["case_id"])
+        subject = str(case.get("subject") or case_id.split("_", 1)[0])
+        view = str(case.get("view") or case_id.removeprefix(f"{subject}_"))
         prediction_path = args.prediction_dir / f"{case_id}.mat"
         kspace_path = Path(str(case["kspace"]))
         if not prediction_path.is_file():
@@ -78,8 +80,8 @@ def main() -> None:
             for time_index in range(reference.shape[3]):
                 row: Dict[str, object] = {
                     "case": case_id,
-                    "subject": str(case["subject"]),
-                    "view": str(case["view"]),
+                    "subject": subject,
+                    "view": view,
                     "slice": slice_index,
                     "time": time_index,
                     "shape": "x".join(str(dim) for dim in reference.shape),
@@ -96,7 +98,7 @@ def main() -> None:
         scale, scaled_prediction = fit_global_scale(reference, prediction)
         case_summary = {
             "case": case_id,
-            "subject": str(case["subject"]),
+            "subject": subject,
             "shape": list(reference.shape),
             "num_frames": len(case_rows),
             "reference": array_stats(reference),
