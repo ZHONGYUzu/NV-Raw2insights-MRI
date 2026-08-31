@@ -150,7 +150,8 @@ def trainer(args):
     # Auto resume
     pretrained_path = resolve_checkpoint_path(args.model_variant)
     resume_path = os.path.join(outpath, args.model_filename)
-    if not os.path.exists(resume_path):
+    resume_from_training_checkpoint = os.path.exists(resume_path)
+    if not resume_from_training_checkpoint:
         resume_path = pretrained_path
     # Load the model, optimizer, and scheduler
     (
@@ -205,7 +206,7 @@ def trainer(args):
     loss_function = get_loss_function(args, device)
 
     # create the optimizer and the learning rate scheduler
-    eff_batch_size = args.batch_size * dist.get_world_size() if args.ddp else args.batch_siz
+    eff_batch_size = args.batch_size * dist.get_world_size() if args.ddp else args.batch_size
 
     print(f"lr_schedule: {args.lr_schedule}")
     print(f"min_lr: {args.min_lr}")
@@ -271,7 +272,7 @@ def trainer(args):
         for b, batch_data in enumerate(train_loader):
             if args.val:
                 break
-            if start_epoch == epoch and step <= 10:
+            if resume_from_training_checkpoint and start_epoch == epoch and step <= 10:
                 adjust_learning_rate(optimizer, b / len(train_loader) + epoch, args, is_resume_first_ten=True)
             else:
                 adjust_learning_rate(optimizer, b / len(train_loader) + epoch, args, is_resume_first_ten=False)

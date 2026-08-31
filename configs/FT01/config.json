@@ -1,0 +1,97 @@
+{
+    "model_variant": "nv_raw2insights_mri_small",
+    "data_path_train": [
+        "dataset/finetune/FT00_CINE_acc8/train"
+    ],
+    "data_path_val": [
+        "dataset/finetune/FT00_CINE_acc8/val"
+    ],
+    "pretrained_csm": null,
+    "pretrained_recon": null,
+    "pp_z_score_norm": false,
+    "fixed_mask_types": [
+        "mask_ktRadial8"
+    ],
+    "uniform_input_kspace": false,
+    "val_interval": 1,
+    "num_samples_per_case": 12,
+    "data_aug": false,
+    "resume_rng_state": false,
+    "do_mapping_shuffle": false,
+    "do_center_crop": false,
+    "seed": 42,
+    "lookahead": false,
+    "muon": false,
+    "muon_scale": 5,
+    "enable_onelogger": false,
+    "flow": false,
+    "balance_data": false,
+    "enable_cas_skips": true,
+    "finetune_ms": false,
+    "adaptive_batch_size": false,
+    "constant_input_flow": false,
+    "amp": true,
+    "acs_lines": 20,
+    "pp_norm": false,
+    "batch_size": 1,
+    "num_workers": 2,
+    "cache_rate": 0.0,
+    "sample_rate": 1.0,
+    "accelerations": [
+        8.0
+    ],
+    "center_fractions": [
+        0.0
+    ],
+    "train_mask_types": [
+        "fixed"
+    ],
+    "acq_types": [
+        "Cine"
+    ],
+    "val_mask_types": [
+        "fixed"
+    ],
+    "num_epochs": 1,
+    "exp_dir": "./exp",
+    "exp": "FT01",
+    "lr": 1e-06,
+    "weight_decay": 0.001,
+    "loss_type": "ssim_l1",
+    "model_type": "restormer",
+    "dataset": "CMRxRecon",
+    "warmup_epochs": 0,
+    "lr_schedule": "cosine",
+    "min_lr": 5e-07,
+    "model_filename": "FT01.pt",
+    "use_csm": true,
+    "use_tau_csm": false,
+    "use_acs_region": true,
+    "norm_type": "ln",
+    "drop_path": 0.1,
+    "num_cascades": 6,
+    "num_frames": 5,
+    "mlp_ratio": 3,
+    "num_blocks": [
+        3,
+        6
+    ],
+    "num_heads": [
+        1,
+        2
+    ],
+    "num_refinement": 2,
+    "channels": [
+        256,
+        512
+    ],
+    "use_dc_weight_map": true,
+    "mask_specific_dc_weight_map": true,
+    "reinit_wandb": false,
+    "ddp": false,
+    "val": false,
+    "is_multi_coil": true,
+    "train_mask_types_for_def_model": [
+        "kt_radial"
+    ]
+}
