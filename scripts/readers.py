@@ -303,13 +303,22 @@ class CMRxReconReader(ImageReader):
         suffixes: Sequence[str] = [".json"]
         return has_h5py and is_supported_format(filename, suffixes)
 
-    def read_mat(self, mat_file: Sequence[PathLike]) -> list:
+    def read_mat(self, mat_file: Sequence[PathLike], include_keys: Sequence[str] | None = None) -> list:
         try:
             with h5py.File(mat_file, "r", swmr=True) as f:
-                data_kv = [(key, f[key][()]) for key in f]
+                keys = list(include_keys) if include_keys else list(f)
+                data_kv = []
+                for key in keys:
+                    if key not in f:
+                        continue
+                    if key in ("kSpace", "dMap") and np.issubdtype(f[key].dtype, np.complexfloating):
+                        data_kv.append((key, f[key].astype(np.complex64)[()]))
+                    else:
+                        data_kv.append((key, f[key][()]))
         except BaseException:
             data = scipy.io.loadmat(mat_file)
-            data_kv = [(key, data[key]) for key in data]
+            keys = include_keys if include_keys else data.keys()
+            data_kv = [(key, data[key]) for key in keys if key in data]
 
         return data_kv
 
@@ -355,14 +364,20 @@ class CMRxReconReader(ImageReader):
                 )
             mask = random.choice(masks) if json_data["mask"] else ""
             mask_type = mask.split("_mask_")[-1][:-4]
-            acquisition_type = re.search(r"(?:^|[/\\])MultiCoil[/\\]([^/\\]+)", kspace, flags=re.I).group(1)
+            acquisition_match = re.search(r"(?:^|[/\\])MultiCoil[/\\]([^/\\]+)", kspace, flags=re.I)
+            acquisition_type = json_data.get("acquisition") or (acquisition_match.group(1) if acquisition_match else None)
+            if acquisition_type is None:
+                raise ValueError(
+                    f"Cannot infer acquisition from {kspace}; add an acquisition field to the descriptor"
+                )
             smap = (
                 json_data.get("sensitivity_maps")
                 or json_data.get("smap")
                 or json_data.get("dMap")
             )
+            kspace_key = json_data.get("kspace_key") or json_data.get("raw_h5_kspace_key")
 
-        kspace_kv = self.read_mat(kspace)
+        kspace_kv = self.read_mat(kspace, include_keys=[kspace_key] if kspace_key else None)
         mask_kv = self.read_mat(mask) if mask else [(None, None)]
         smap_kv = self.read_first_existing(smap)
 
@@ -389,18 +404,34 @@ class CMRxReconReader(ImageReader):
         header = self._get_meta_dict(dat)
         if "kus" in dat:
             kspace_key = "kus"
+        elif CMRxReconKeys.KSPACE in dat:
+            kspace_key = CMRxReconKeys.KSPACE
+        elif "kspace" in dat:
+            kspace_key = "kspace"
+        elif "kSpace" in dat:
+            kspace_key = "kSpace"
         else:
-            kspace_key = CMRxReconKeys.KSPACE if CMRxReconKeys.KSPACE in dat else "kspace"
-        if np.issubdtype(
+            raise ValueError("Expected one of kus, kspace_full, kspace, or raw H5 kSpace")
+
+        if kspace_key == "kSpace":
+            if not np.issubdtype(dat[kspace_key].dtype, np.complexfloating):
+                raise ValueError(f"raw H5 {kspace_key} must be complex data, got dtype={dat[kspace_key].dtype}")
+            if dat[kspace_key].ndim != 5:
+                raise ValueError(
+                    f"raw H5 {kspace_key} must have shape (slice, coil, time, PE, FE), got {dat[kspace_key].shape}"
+                )
+            data: ndarray = np.transpose(dat[kspace_key], (2, 0, 1, 3, 4))
+            data_shape = data.shape
+        elif np.issubdtype(
             dat[kspace_key].dtype, np.complexfloating
         ):  # return from scipy.io.loadmat is complex ndarray with transposed shape
             data_shape = dat[kspace_key].shape[::-1]
             data_shape = (1,) * (5 - len(data_shape)) + data_shape  # [t, z, c, y, x] or [1, z, c, y, x]
-            data: ndarray = dat[kspace_key].transpose()  # .reshape(-1, data_shape[-3], data_shape[-2], data_shape[-1])
+            data = dat[kspace_key].transpose()  # .reshape(-1, data_shape[-3], data_shape[-2], data_shape[-1])
         else:
             data_shape = dat[kspace_key]["real"].shape
             data_shape = (1,) * (5 - len(data_shape)) + data_shape  # [t, z, c, y, x] or [1, z, c, y, x]
-            data: ndarray = np.array(dat[kspace_key]["real"] + 1j * dat[kspace_key]["imag"])
+            data = np.array(dat[kspace_key]["real"] + 1j * dat[kspace_key]["imag"])
         data = data.reshape(data_shape)
 
         header[CMRxReconKeys.PID] = os.path.splitext(dat[CMRxReconKeys.FILENAME])[0].split("_")[0]
