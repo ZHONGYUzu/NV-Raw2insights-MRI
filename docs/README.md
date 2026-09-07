@@ -17,6 +17,7 @@ intentionally separate.
 | Active 10-case benchmark procedure | [`NV-Raw2insights-MRI_SOP.md`](NV-Raw2insights-MRI_SOP.md) | Variable PE, FE 192, `dImgC` GT, and `CINE_test_acc*` roots. |
 | Active benchmark status/results | [`CINE_benchmark_report.md`](CINE_benchmark_report.md) | Completed, pending, timing, and risk record for the SOP cohort. |
 | Code and experiment migration plan | [`CODE_AND_EXPERIMENT_MIGRATION_PLAN.md`](CODE_AND_EXPERIMENT_MIGRATION_PLAN.md) | Branch/worktree architecture, code consolidation, experiment registry, and change-control baseline. |
+| September code consolidation review | [`history/2026-09-07-code-consolidation-closeout.md`](history/2026-09-07-code-consolidation-closeout.md) | Retained scripts, retired workbooks, validation, and review handoff. |
 | Legacy 5-case custom-CINE baseline | [`codex/README.md`](codex/README.md) | Fixed 132×176 cases using `CustomCINEDataR1/R2/R3`. |
 | Dated investigations and run logs | [`history/README.md`](history/README.md) | Evidence and historical context; not the default source for current commands. |
 | Human project memory | [`../FYI.md`](../FYI.md) | Dated explanations; sections may describe older code states. |
