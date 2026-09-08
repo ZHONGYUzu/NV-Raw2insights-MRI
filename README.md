@@ -32,6 +32,31 @@ This project was conducted by NVIDIA in collaboration with the [CMRxRecon Team](
 
 Checkpoints are automatically downloaded from [HuggingFace](https://huggingface.co/nvidia/NV-Raw2Insights-MRI) when not provided locally.
 
+## Acceleration Scope
+
+Do not mix the acceleration settings of the source benchmarks, paper tables,
+and released checkpoint configs:
+
+| Scope | Acceleration factors |
+|-------|----------------------|
+| CMRxRecon2024 Task 1 | `4x`, `8x`, `10x` |
+| CMRxRecon2024 Task 2 | `4x`, `8x`, `12x`, `16x`, `20x`, `24x` |
+| SDUM paper experiments | CMRxRecon2024 uses the Task 1/2 ranges above; a separately trained fastMRI brain model reports `4x` and `6x` |
+| Current released Small/Base/Large configs | `8x`, `16x`, `24x` |
+| Formal checkpoint reproduction in this repository | **`8x`, `16x`, `24x`** |
+
+Sources: [CMRxRecon2024 official task definitions](https://github.com/CmrxRecon/CMRxRecon2024#challenge-tasks),
+[SDUM paper](https://arxiv.org/abs/2512.17137), and the released
+[`small`](configs/nv_raw2insights_mri_small.json),
+[`base`](configs/nv_raw2insights_mri_base.json), and
+[`large`](configs/nv_raw2insights_mri_large.json) configs.
+
+Accordingly, the active in-house checkpoint benchmark must use nominal
+acceleration labels `8`, `16`, and `24` unless a separate out-of-distribution
+experiment is explicitly declared. These are model-conditioning and experiment
+labels. When ACS lines are added or forced, also report the measured effective
+acceleration; it may differ from the nominal label.
+
 ## Quick Start
 
 ### Installation
