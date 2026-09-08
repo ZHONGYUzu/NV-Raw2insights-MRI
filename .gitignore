@@ -139,3 +139,21 @@ checkpoints/
 .agents/skills/
 .claude_resources.json
 skills-lock.json
+
+# Local research reading material and downloaded result copies (keep on disk).
+/2512.17137v2.pdf
+/papers/*.pdf
+/downloads/**/*.png
+/downloads/**/*.csv
+/stability/**/*.png
+
+# Paper-reading renders and personal PDF annotation helper, not MRI model code.
+/tmp/pdfs/*.pdf
+/tmp/pdfs/*.png
+/tmp/pdfs/*.txt
+/tmp/pdfs/*.xml
+/tmp/pdfs/rendered/*.png
+/tmp/pdfs/build_annotated_sdum.py
+
+# LibreOffice transient workbook locks; never treat these as experiment assets.
+.~lock.*#
