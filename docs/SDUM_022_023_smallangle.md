@@ -1,13 +1,17 @@
 # SDUM-022 / SDUM-023: small-angle CINE test run
 
-Status: revised local implementation, not submitted to the server. Commit and
-push are handled by the user. Neither this document nor pushing the branch
-restarts the paused experiments. Historical sdum-019/020/021 remain unchanged.
+Status: zero-degree preparation, consistency checks and inference completed.
+The user authorized nonzero pilot submission on 2026-09-09. Execution uses
+commit db120e63cd43c2161260fa3cc892ea58cd05d6d7; the expanded angle set is
+supported by this existing implementation. Commit and push of documentation
+updates remain user-managed. Historical sdum-019/020/021 remain unchanged.
 
 ## Scope and reference decision
 
 - SDUM-022: rotate full complex coil images by 0, 1, 3, 5 degrees for the pilot.
-- SDUM-023: midpoint step 0 to 3 degrees; prepare 0 to 0 as a numerical control.
+- SDUM-023: midpoint steps 0 to 1, 0 to 3 and 0 to 5 degrees; reuse the
+  completed 0 to 0 numerical control. The 1- and 5-degree steps were added
+  with user approval on 2026-09-09.
 - Both: Sub0014 and Sub0047, acc8, VISTA seed8 plus 20 central ACS lines,
   all native slices and cardiac frames. No ranking crop.
 - Input comes directly from H5 `kSpace`, never from `dImgC * dMap`.
@@ -89,7 +93,7 @@ fail instead of silently dropping cases. Existing reviews cannot be overwritten.
 Each run contains `conditions/acc8/<label>/` with `MultiCoil/Cine/UnderSample_TaskR1`,
 `Mask_TaskR1`, `json_input`, `ground_truth`, `valid_roi`, `trajectories`, `records`,
 and subsequently `output/val_img4ranking`. Labels: rot_p000/001/003/005 and
-step_p000_t050/step_p003_t050. Motion k-space contains K0 placeholders on
+step_p000_t050/step_p001_t050/step_p003_t050/step_p005_t050. Motion k-space contains K0 placeholders on
 unacquired lines; inference applies the mask once, and this carrier must never
 be treated as a consistent fully sampled GT. Preparation records hash all output
 artifacts plus source mask/code and record source H5 stat identity. Resume refuses
@@ -112,7 +116,7 @@ GitHub or copied locally by these scripts.
 - Existing `sdum_smallangle_preflight.py` and its old Slurm wrapper retain the
   cancelled fixed-coil model diagnostic; do not submit them for this protocol.
 
-## Execution sequence (not executed by editing or committing)
+## Execution sequence
 
 1. Run synthetic tests locally with numpy/scipy/h5py/matplotlib installed:
    `python -m unittest discover -s tests -p test_sdum_smallangle.py -v`.
@@ -128,11 +132,18 @@ GitHub or copied locally by these scripts.
    to the reviewed Base checkpoint and submit with --gres=gpu:1. Keep all other
    settings fixed. Compare to an original-input baseline using the same checkpoint,
    code, mask and normalization, and inspect suitability of the RSS reference.
-6. After that inspection, run pose ANGLES='1 3 5' and motion ANGLES=3; no automatic
-   full-cohort expansion. Existing predictions are refused by the wrapper.
+6. The zero controls produced identical reconstructions, but RSS/output intensity
+   suitability remains unresolved. With explicit user authorization, run pose
+   and motion angles 1, 3 and 5 as separate pilot conditions. Each CPU preparation
+   job has one dependent GPU inference job (afterok); no additional zero-control
+   job or full-cohort expansion. Existing predictions are refused by the wrapper.
+   Inspect outputs visually; submission does not accept RSS for formal metrics.
 7. Evaluate with explicit --root, --acc 8, --cases Sub0014 Sub0047, --conditions,
    --review-id, --error-fraction, and --accept-rss-reference. Include motion0 as
    the control in SDUM-023. Full cohort and additional angles remain later work.
 
 Original native dImgC figures remain separate under
 `/home/students/studxuzho1/cine_ground_truth/plot_20260909_01/`.
+
+Submission job IDs and execution provenance are recorded in
+[the 2026-09-09 submission record](history/2026-09-09-sdum-022-023-nonzero-submission.md).
